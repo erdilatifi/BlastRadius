@@ -1,0 +1,5 @@
+[package]
+name = "controlplane"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
