@@ -1,0 +1,8 @@
+PLAN.md
+.claude/settings.local.json
+target/
+node_modules/
+dist/
+.terraform/
+*.tfstate*
+__pycache__/
