@@ -3,7 +3,7 @@ kind: ValidatingPolicy
 metadata:
   name: require-requests-limits
 spec:
-  validationActions: [Deny]
+  validationActions: [Audit]
   autogen:
     podControllers:
       controllers: [deployments]

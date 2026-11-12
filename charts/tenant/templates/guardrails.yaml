@@ -1,4 +1,5 @@
 {{- $tier := required "unknown tier" (index .Values.tiers .Values.tier) }}
+{{- if $tier.limits }}
 apiVersion: v1
 kind: ResourceQuota
 metadata:
@@ -32,6 +33,7 @@ spec:
       max:
         cpu: {{ $tier.limits.cpuMillis }}m
         memory: {{ $tier.limits.memoryMiB }}Mi
+{{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

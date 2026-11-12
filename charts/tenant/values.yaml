@@ -5,6 +5,8 @@ slo:
   latencyObjective: 95
 
 tiers:
+  unbounded:
+    requests: {cpuMillis: 50, memoryMiB: 32}
   small:
     requests: {cpuMillis: 50, memoryMiB: 32}
     limits: {cpuMillis: 200, memoryMiB: 64}

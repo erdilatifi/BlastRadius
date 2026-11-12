@@ -42,9 +42,11 @@ spec:
             requests:
               cpu: {{ $tier.requests.cpuMillis }}m
               memory: {{ $tier.requests.memoryMiB }}Mi
+            {{- with $tier.limits }}
             limits:
-              cpu: {{ $tier.limits.cpuMillis }}m
-              memory: {{ $tier.limits.memoryMiB }}Mi
+              cpu: {{ .cpuMillis }}m
+              memory: {{ .memoryMiB }}Mi
+            {{- end }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

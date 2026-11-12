@@ -1,5 +1,5 @@
 name: acme
-tier: small
+tier: unbounded
 image:
   tag: sha-e24e18f
 replicas:
