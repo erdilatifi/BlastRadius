@@ -6,6 +6,9 @@ on:
       label:
         description: Name of this result set, such as baseline
         required: true
+      rates:
+        description: Requests per second to step through
+        default: 10 20 40 80 160
 
 permissions: {}
 
@@ -19,6 +22,7 @@ jobs:
       TF_VAR_revision: ${{ github.sha }}
       KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
       LABEL: ${{ inputs.label }}
+      RATES: ${{ inputs.rates }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
