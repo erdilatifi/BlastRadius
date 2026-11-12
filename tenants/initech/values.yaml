@@ -1,0 +1,12 @@
+name: initech
+tier: small
+image:
+  tag: sha-7f42d6c
+replicas:
+  min: 2
+  max: 4
+slo:
+  availability: 99.5
+  latencyMs: 300
+chaos: true
+remediation: true
