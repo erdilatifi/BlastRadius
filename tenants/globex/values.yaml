@@ -1,0 +1,12 @@
+name: globex
+tier: medium
+image:
+  tag: sha-f8eeeaf
+replicas:
+  min: 2
+  max: 4
+slo:
+  availability: 99.9
+  latencyMs: 250
+chaos: true
+remediation: true

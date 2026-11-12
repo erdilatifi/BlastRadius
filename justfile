@@ -1,11 +1,12 @@
 doctor:
     #!/usr/bin/env bash
     status=0
-    for tool in git docker python3 cargo rustc node npm kubectl k3d terraform tflint helm kyverno trivy cosign k6 just; do
+    for tool in git docker python3 cargo rustc node npm kubectl k3d terraform tflint helm kubeconform kyverno trivy cosign k6 just; do
       case $tool in
         kubectl) args="version --client" ;;
         k3d|kyverno|cosign|k6|terraform) args="version" ;;
         helm) args="version --short" ;;
+        kubeconform) args="-v" ;;
         *) args="--version" ;;
       esac
       if command -v "$tool" >/dev/null; then

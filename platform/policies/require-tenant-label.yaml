@@ -1,0 +1,22 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-tenant-label
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments]
+  matchConstraints:
+    namespaceSelector:
+      matchExpressions:
+        - key: tenant
+          operator: Exists
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  validations:
+    - expression: "'tenant-' + object.metadata.?labels.tenant.orValue('') == object.metadata.namespace"
+      messageExpression: "'pods in ' + object.metadata.namespace + ' need the label tenant: ' + object.metadata.namespace.substring(7)"

@@ -1,0 +1,79 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: admission
+policies:
+  - ../../platform/policies/disallow-latest-tag.yaml
+  - ../../platform/policies/require-requests-limits.yaml
+  - ../../platform/policies/require-tenant-label.yaml
+  - ../../platform/policies/restrict-image-registry.yaml
+resources:
+  - good.yaml
+  - latest-tag.yaml
+  - no-limits.yaml
+  - no-tenant-label.yaml
+  - foreign-registry.yaml
+  - privileged.yaml
+  - over-limit.yaml
+variables: values.yaml
+results:
+  - policy: disallow-latest-tag
+    isValidatingPolicy: true
+    kind: Deployment
+    resources: [good]
+    result: pass
+  - policy: disallow-latest-tag
+    isValidatingPolicy: true
+    kind: Deployment
+    resources: [latest-tag]
+    result: fail
+  - policy: disallow-latest-tag
+    isValidatingPolicy: true
+    kind: Pod
+    resources: [privileged, over-limit]
+    result: pass
+  - policy: require-requests-limits
+    isValidatingPolicy: true
+    kind: Deployment
+    resources: [good]
+    result: pass
+  - policy: require-requests-limits
+    isValidatingPolicy: true
+    kind: Deployment
+    resources: [no-limits]
+    result: fail
+  - policy: require-requests-limits
+    isValidatingPolicy: true
+    kind: Pod
+    resources: [privileged, over-limit]
+    result: pass
+  - policy: require-tenant-label
+    isValidatingPolicy: true
+    kind: Deployment
+    resources: [good]
+    result: pass
+  - policy: require-tenant-label
+    isValidatingPolicy: true
+    kind: Deployment
+    resources: [no-tenant-label]
+    result: fail
+  - policy: require-tenant-label
+    isValidatingPolicy: true
+    kind: Pod
+    resources: [privileged, over-limit]
+    result: pass
+  - policy: restrict-image-registry
+    isValidatingPolicy: true
+    kind: Deployment
+    resources: [good]
+    result: pass
+  - policy: restrict-image-registry
+    isValidatingPolicy: true
+    kind: Deployment
+    resources: [foreign-registry]
+    result: fail
+  - policy: restrict-image-registry
+    isValidatingPolicy: true
+    kind: Pod
+    resources: [privileged, over-limit]
+    result: pass

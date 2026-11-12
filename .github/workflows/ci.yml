@@ -21,6 +21,7 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
+      - run: cargo run -p brctl -- tenant list
 
   web:
     runs-on: ubuntu-24.04
@@ -81,7 +82,23 @@ jobs:
           done
       - run: tflint --recursive
         working-directory: terraform
-      - run: trivy config --exit-code 1 .
+      - run: trivy config --exit-code 1 --skip-dirs tests/admission --helm-values tenants/acme/values.yaml .
+
+  manifests:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: scripts/toolchain.sh helm kubeconform kyverno
+      - run: |
+          for values in tenants/*/values.yaml; do
+            helm lint --strict charts/tenant -f "$values"
+            helm template "$(basename "$(dirname "$values")")" charts/tenant -f "$values" | kubeconform -strict -summary
+          done
+      - run: kyverno test tests/admission
 
   e2e:
     runs-on: ubuntu-24.04
@@ -95,8 +112,24 @@ jobs:
           persist-credentials: false
       - run: scripts/toolchain.sh terraform kubectl k3d just
       - run: just up ci
+      - run: |
+          for t in $(ls tenants); do
+            kubectl -n argocd wait --for=create "application/tenant-$t" --timeout=5m
+            kubectl -n argocd wait --for=jsonpath='{.status.health.status}'=Healthy "application/tenant-$t" --timeout=5m
+            created=$(kubectl -n argocd get "application/tenant-$t" -o jsonpath='{.metadata.creationTimestamp}')
+            echo "tenant-$t Healthy $(( $(date +%s) - $(date -d "$created" +%s) ))s after its Application was created"
+          done
+        env:
+          KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
+      - run: tests/isolation.sh acme globex
+        env:
+          KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
       - if: failure()
-        run: kubectl --kubeconfig terraform/cluster/kubeconfig -n argocd get applications -o yaml
+        run: |
+          kubectl -n argocd get applications -o yaml
+          kubectl get pods,events -A
+        env:
+          KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
       - if: always()
         run: just down
       - run: test -z "$(docker ps -aq --filter name=k3d-)$(docker network ls -q --filter name=k3d-)$(docker volume ls -q --filter name=k3d-)"
