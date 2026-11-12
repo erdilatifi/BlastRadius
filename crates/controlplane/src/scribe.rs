@@ -142,7 +142,8 @@ type Collected = (Facts, Option<i64>, Vec<(i64, Commit)>, f64);
 
 async fn collect(state: &State, alert: &Alert, tenant: &str) -> Result<Collected> {
     let fired_at = alert.starts_at.as_second();
-    let ns = format!("tenant-{tenant}");
+    let known = state.sources.tenant(tenant).await?;
+    let ns = known.map_or_else(|| format!("tenant-{tenant}"), |t| t.namespace);
     let at = Some(fired_at as u64);
     let mut signals = Vec::new();
     for (name, label, query, unit) in SIGNALS {

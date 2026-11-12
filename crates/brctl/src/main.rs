@@ -27,7 +27,7 @@ enum Command {
     Chaos(ChaosCommand),
     #[command(subcommand, about = "The run ledger")]
     Ledger(LedgerCommand),
-    #[command(about = "Tenant sync and health; fails unless every tenant is Synced and Healthy")]
+    #[command(about = "Tenant sync and health; fails unless every tracked tenant is Synced and Healthy")]
     Status,
 }
 

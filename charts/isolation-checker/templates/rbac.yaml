@@ -1,0 +1,51 @@
+{{- if .Values.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "isolation-checker.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "isolation-checker.labels" . | nindent 4 }}
+---
+{{- end }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "isolation-checker.fullname" . }}
+  labels:
+    {{- include "isolation-checker.labels" . | nindent 4 }}
+rules:
+  # Tenants are namespaces matched by tenants.selector; their pods are counted for restarts and readiness.
+  - apiGroups: [""]
+    resources: [namespaces, pods]
+    verbs: [get, list, watch]
+  {{- $resources := include "isolation-checker.chaosResources" . | fromJsonArray }}
+  {{- if $resources }}
+  # One fault at a time, created in the target namespace and deleted when the experiment ends.
+  # The control plane only targets namespaces that carry the tenants.optIn annotation.
+  - apiGroups: [chaos-mesh.org]
+    resources: {{ $resources | toJson }}
+    verbs: [create, delete]
+  {{- end }}
+  {{- with .Values.integrations }}
+  {{- if .argocd }}
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    verbs: [get, list, watch]
+  {{- end }}
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "isolation-checker.fullname" . }}
+  labels:
+    {{- include "isolation-checker.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "isolation-checker.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "isolation-checker.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}

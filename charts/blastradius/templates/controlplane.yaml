@@ -45,6 +45,10 @@ data:
       {{- toYaml (pick .Values "cpuMillis" "memoryMiB" "pods") | nindent 6 }}
     chaos:
       {{- toYaml .Values.chaos | nindent 6 }}
+    tenants:
+      {{- toYaml .Values.tenants | nindent 6 }}
+    integrations:
+      {{- toYaml .Values.integrations | nindent 6 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -61,7 +65,7 @@ spec:
       labels:
         app.kubernetes.io/name: controlplane
       annotations:
-        checksum/platform: {{ pick .Values "tiers" "cpuMillis" "memoryMiB" "pods" "chaos" | toYaml | sha256sum }}
+        checksum/platform: {{ pick .Values "tiers" "cpuMillis" "memoryMiB" "pods" "chaos" "tenants" "integrations" | toYaml | sha256sum }}
     spec:
       serviceAccountName: controlplane
       securityContext:

@@ -17,6 +17,8 @@ export type Amount = { cpuMillis: number; memoryMiB: number; pods: number };
 export type Usage = {
 	name: string;
 	tier: string;
+	/** Absent from control planes older than this console. */
+	quota?: Amount | null;
 	cpuUsedMillis: number | null;
 	cpuRequestedMillis: number | null;
 	memoryUsedMib: number | null;

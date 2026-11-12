@@ -1,4 +1,5 @@
 mod api;
+mod config;
 mod postmortem;
 mod runs;
 mod score;
@@ -27,7 +28,6 @@ use crate::sources::Sources;
 
 struct Config {
     prometheus: String,
-    traefik: String,
     platform: PathBuf,
     web: PathBuf,
     commit: String,
@@ -41,7 +41,6 @@ impl Config {
         let pr_mode = |key: &str| !token.is_empty() && var(key, "") == "pr";
         Ok(Config {
             prometheus: var("PROMETHEUS_URL", "http://prometheus-operated.monitoring:9090"),
-            traefik: var("TRAEFIK_URL", "http://traefik.kube-system"),
             platform: var("PLATFORM_FILE", "/etc/blastradius/platform.yaml").into(),
             web: var("WEB_DIR", "/web").into(),
             commit: var("COMMIT", "unknown"),
@@ -63,9 +62,14 @@ impl Config {
 
 #[derive(Deserialize)]
 pub struct Platform {
+    #[serde(default)]
     tiers: BTreeMap<String, Tier>,
+    #[serde(default)]
     capacity: Amount,
     chaos: runs::Config,
+    tenants: config::Tenants,
+    #[serde(default)]
+    integrations: config::Integrations,
 }
 
 pub struct State {
@@ -81,15 +85,19 @@ async fn main() -> Result<()> {
     let config = Config::from_env()?;
     let platform =
         std::fs::read_to_string(&config.platform).with_context(|| format!("read {}", config.platform.display()))?;
+    let platform: Platform =
+        serde_saphyr::from_str(&platform).with_context(|| format!("parse {}", config.platform.display()))?;
+    platform.tenants.validate()?;
     let http = reqwest::Client::builder().timeout(Duration::from_secs(5)).build()?;
-    let state = Arc::new(State {
-        sources: Sources::new(http.clone(), config.prometheus).await?,
-        platform: serde_saphyr::from_str(&platform)?,
-        runs: Runs::new(config.commit.clone()),
-        scribe: config.scribe,
-    });
+    let sources =
+        Sources::new(http.clone(), config.prometheus, platform.tenants.clone(), platform.integrations.argocd.clone())
+            .await?;
+    let traffic = platform.integrations.traffic.clone();
+    let state = Arc::new(State { sources, platform, runs: Runs::new(config.commit.clone()), scribe: config.scribe });
     let metrics = PrometheusBuilder::new().install_recorder()?;
-    tokio::spawn(traffic::run(state.clone(), http, config.traefik));
+    if let Some(traffic) = traffic {
+        tokio::spawn(traffic::run(state.clone(), http, traffic));
+    }
 
     let web = ServeDir::new(&config.web).fallback(ServeFile::new(config.web.join("index.html")));
     let app = Router::new()

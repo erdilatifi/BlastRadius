@@ -5,3 +5,22 @@ scribe:
   mode: artifact
 remediation:
   mode: dry-run
+tenants:
+  selector: tenant
+  nameLabel: tenant
+  tierLabel: tier
+  targetPods:
+    app.kubernetes.io/name: workload
+  slis:
+    requests: 'sum(rate(traefik_service_requests_total{service=~"tenant-$tenant-workload-.*"}[$range]))'
+    errors: 'sum(rate(traefik_service_requests_total{service=~"tenant-$tenant-workload-.*",code=~"5.."}[$range]))'
+    p95Seconds: 'histogram_quantile(0.95, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{service=~"tenant-$tenant-workload-.*"}[$range])))'
+integrations:
+  argocd:
+    namespace: argocd
+    appPrefix: tenant-
+  traffic:
+    url: http://traefik.kube-system
+    host: $tenant.blastradius.localhost
+    path: /api/quote
+  detectAlert: 'ALERTS{alertstate="firing",alertname=~"Tenant.+Burn",tenant="$tenant"}'

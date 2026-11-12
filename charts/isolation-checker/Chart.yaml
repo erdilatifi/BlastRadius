@@ -1,0 +1,5 @@
+apiVersion: v2
+name: isolation-checker
+description: Injects one fault into one opted-in tenant namespace and measures whether any other tenant noticed.
+type: application
+version: 0.1.0

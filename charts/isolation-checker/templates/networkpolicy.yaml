@@ -1,0 +1,28 @@
+{{- if .Values.networkPolicy.enabled }}
+# The API starts faults and has no authentication yet: nothing reaches it unless listed here.
+# kubectl port-forward still works, because it does not pass through the pod network.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "isolation-checker.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "isolation-checker.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "isolation-checker.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    {{- with .Values.networkPolicy.allowedNamespaces }}
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values: {{ toJson . }}
+      ports:
+        - port: http
+    {{- else }} []
+    {{- end }}
+{{- end }}

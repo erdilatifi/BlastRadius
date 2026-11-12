@@ -1,0 +1,148 @@
+image:
+  repository: ghcr.io/erdilatifi/blastradius/controlplane
+  # Required. Images are published as sha-<short commit>.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Prometheus that scrapes your tenants and kube-state-metrics.
+prometheusUrl: http://prometheus-operated.monitoring:9090
+
+# Which namespaces are tenants, and how to measure them.
+tenants:
+  # Label selector (Kubernetes syntax). Every namespace it matches is a tenant.
+  selector: tenant
+  # Tenant name from this namespace label. Leave it out to use the namespace name.
+  nameLabel: tenant
+  # Optional namespace label shown as the tenant's tier.
+  # tierLabel: tier
+  # A fault is only injected into a namespace with this annotation. Bystanders need not opt in.
+  optIn:
+    annotation: chaos-mesh.org/inject
+    value: enabled
+  # Pod labels a fault selects inside the target namespace. Empty selects every pod.
+  targetPods: {}
+  # PromQL, evaluated once per tenant. Each query must return a single series (aggregate with sum).
+  # Placeholders: $namespace, $tenant (the name above) and $range (the window, such as 120s).
+  # requests and errors are per-second rates; the error ratio is errors / requests, and a tenant
+  # with no requests counts as having no traffic. p95Seconds is in seconds.
+  slis:
+    # Application metrics, with the namespace label Prometheus adds when it scrapes a pod or service.
+    requests: 'sum(rate(http_requests_total{namespace="$namespace"}[$range]))'
+    errors: 'sum(rate(http_requests_total{namespace="$namespace",code=~"5.."}[$range]))'
+    p95Seconds: 'histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace="$namespace"}[$range])))'
+    # ingress-nginx, measured at the ingress:
+    #   requests: 'sum(rate(nginx_ingress_controller_requests{exported_namespace="$namespace"}[$range]))'
+    #   errors: 'sum(rate(nginx_ingress_controller_requests{exported_namespace="$namespace",status=~"5.."}[$range]))'
+    #   p95Seconds: 'histogram_quantile(0.95, sum by (le) (rate(nginx_ingress_controller_request_duration_seconds_bucket{exported_namespace="$namespace"}[$range])))'
+    # Istio, measured at the receiving sidecar (its histogram is in milliseconds):
+    #   requests: 'sum(rate(istio_requests_total{reporter="destination",destination_workload_namespace="$namespace"}[$range]))'
+    #   errors: 'sum(rate(istio_requests_total{reporter="destination",destination_workload_namespace="$namespace",response_code=~"5.."}[$range]))'
+    #   p95Seconds: 'histogram_quantile(0.95, sum by (le) (rate(istio_request_duration_milliseconds_bucket{reporter="destination",destination_workload_namespace="$namespace"}[$range]))) / 1000'
+  # Per-tenant replacements for any of the three queries.
+  overrides: {}
+  #   legacy-billing:
+  #     p95Seconds: 'histogram_quantile(0.95, sum by (le) (rate(legacy_latency_seconds_bucket{namespace="$namespace"}[$range])))'
+
+# Optional extras; leave a key out to turn it off.
+integrations: {}
+#   detectAlert: 'ALERTS{alertstate="firing",severity="page",namespace="$namespace"}'   # time to detect
+#   argocd: {namespace: argocd, appPrefix: team-}   # sync and health from Applications named <appPrefix><tenant>; appPrefix defaults to ""
+
+# The experiments and how a run is judged. These are Chaos Mesh resources: the control plane fills in
+# the selector (the target namespace and targetPods) and the duration.
+chaos:
+  # Quiet period measured before the fault, and the longest wait for the target to recover after it.
+  baselineSeconds: 120
+  recoverySeconds: 180
+  # A bystander is hurt when its errors rise by more than errorRisePp percentage points, its p95 grows
+  # past both p95Factor x baseline and baseline + p95MarginMs, or its pods restart or turn unready.
+  # A run is invalid, and scores nothing, if any tenant had no traffic in the baseline, errors above
+  # healthyErrorPp percent, or restarting or unready pods.
+  thresholds:
+    errorRisePp: 0.5
+    p95Factor: 1.5
+    p95MarginMs: 10
+    healthyErrorPp: 1
+  experiments:
+    pod-kill:
+      hypothesis: The target stays inside its SLO because a second replica and the PDB carry it. Bystanders do not move.
+      injectSeconds: 120
+      chaos:
+        kind: PodChaos
+        spec:
+          action: pod-kill
+          mode: one
+    cpu-stress:
+      hypothesis: The target is throttled at its own CPU limit. Bystanders keep their p95.
+      injectSeconds: 120
+      chaos:
+        kind: StressChaos
+        spec:
+          mode: all
+          stressors:
+            cpu:
+              workers: 2
+              load: 100
+    memory-stress:
+      hypothesis: The target container is OOM-killed at its own memory limit. No node pressure, no bystander restarts.
+      injectSeconds: 120
+      chaos:
+        kind: StressChaos
+        spec:
+          mode: one
+          stressors:
+            memory:
+              workers: 1
+              size: 256MB
+    network-delay:
+      hypothesis: Only the target's latency SLI moves.
+      injectSeconds: 120
+      chaos:
+        kind: NetworkChaos
+        spec:
+          action: delay
+          mode: all
+          delay:
+            latency: 200ms
+
+serviceAccount:
+  create: true
+  name: ""
+
+service:
+  port: 8080
+
+# The API can start faults and has no login yet. By default nothing in the cluster can reach it;
+# use kubectl port-forward, or list the namespaces that may (your ingress controller, Prometheus).
+networkPolicy:
+  enabled: true
+  allowedNamespaces: []
+
+# Scrape the control plane's own /metrics (needs the Prometheus Operator CRDs).
+serviceMonitor:
+  enabled: false
+  labels: {}
+
+# Exposes the console and API. Put authentication in front of it: anyone who reaches it can start a fault.
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  annotations: {}
+  tls: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 500m
+    memory: 128Mi
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+fullnameOverride: ""

@@ -118,6 +118,7 @@ impl Api {
             let cells = ["name", "tier", "sync", "health"].map(|k| format!("{:<12}", text(&t[k])));
             println!("{}{}%", cells.concat(), t["availability"]);
         }
-        Ok(tenants.iter().all(|t| t["sync"] == "Synced" && t["health"] == "Healthy"))
+        let ok = |t: &Value, key: &str, good: &str| t[key] == good || t[key] == "n/a";
+        Ok(tenants.iter().all(|t| ok(t, "sync", "Synced") && ok(t, "health", "Healthy")))
     }
 }

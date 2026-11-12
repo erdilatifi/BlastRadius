@@ -1,0 +1,115 @@
+{{- $platform := include "isolation-checker.platform" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "isolation-checker.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "isolation-checker.labels" . | nindent 4 }}
+data:
+  platform.yaml: |
+    {{- $platform | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "isolation-checker.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "isolation-checker.labels" . | nindent 4 }}
+spec:
+  # Runs live in memory; a second replica would not see the first one's runs.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "isolation-checker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "isolation-checker.labels" . | nindent 8 }}
+      annotations:
+        checksum/platform: {{ $platform | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "isolation-checker.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: controlplane
+          image: {{ .Values.image.repository }}:{{ required "image.tag is required: pick a published sha-<commit> tag" .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PROMETHEUS_URL
+              value: {{ required "prometheusUrl is required" .Values.prometheusUrl | quote }}
+            - name: COMMIT
+              value: {{ .Values.image.tag | quote }}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: platform
+              mountPath: /etc/blastradius
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: platform
+          configMap:
+            name: {{ include "isolation-checker.fullname" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "isolation-checker.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "isolation-checker.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "isolation-checker.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
