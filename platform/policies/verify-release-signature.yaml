@@ -1,0 +1,36 @@
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: verify-release-signature
+spec:
+  validationActions: [Deny]
+  webhookConfiguration:
+    timeoutSeconds: 15
+  autogen:
+    podControllers:
+      controllers: [deployments]
+  matchConstraints:
+    namespaceSelector:
+      matchExpressions:
+        - key: tenant
+          operator: Exists
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  matchImageReferences:
+    - glob: ghcr.io/erdilatifi/blastradius/*
+  validationConfigurations:
+    mutateDigest: false
+    verifyDigest: false
+  attestors:
+    - name: release
+      cosign:
+        keyless:
+          identities:
+            - issuer: https://token.actions.githubusercontent.com
+              subject: https://github.com/erdilatifi/BlastRadius/.github/workflows/release.yml@refs/heads/main
+  validations:
+    - expression: images.containers.map(image, verifyImageSignatures(image, [attestors.release])).all(e, e > 0)
+      message: image must be signed by the BlastRadius release workflow

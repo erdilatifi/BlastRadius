@@ -1,7 +1,7 @@
 name: acme
 tier: small
 image:
-  tag: sha-f8eeeaf
+  tag: sha-7f42d6c
 replicas:
   min: 2
   max: 4
