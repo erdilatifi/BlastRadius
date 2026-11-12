@@ -113,7 +113,10 @@ jobs:
           validate() { kubeconform -strict -summary -schema-location default -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'; }
           for values in tenants/*/values.yaml; do
             helm lint --strict charts/tenant -f "$values"
-            helm template "$(basename "$(dirname "$values")")" charts/tenant -f "$values" | validate
+            name=$(basename "$(dirname "$values")")
+            helm template "$name" charts/tenant -f "$values" | tee "$RUNNER_TEMP/$name.yaml" | validate
+            grep -q '^kind: ResourceQuota$' "$RUNNER_TEMP/$name.yaml" || { echo "$name has no ResourceQuota"; exit 1; }
+            helm template "$name" charts/tenant -f "$values" -s templates/workload.yaml | grep -A1 '^ *limits:$' | grep -q 'cpu:' || { echo "$name has no CPU limit"; exit 1; }
           done
           platform=(-f charts/tenant/values.yaml -f platform/capacity.yaml -f platform/chaos/catalog.yaml -f charts/blastradius/values.yaml)
           helm lint --strict charts/blastradius "${platform[@]}"
