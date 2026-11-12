@@ -23,6 +23,22 @@ jobs:
       - run: cargo test
       - run: cargo run -p brctl -- tenant list
 
+  windows:
+    runs-on: windows-2025
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: cat versions.env >> "$GITHUB_ENV"
+      - run: rustup toolchain install "$RUST_VERSION" --profile minimal && rustup default "$RUST_VERSION"
+      - run: cargo test -p brcore -p brctl
+      - run: cargo run -p brctl -- tenant list
+
   web:
     runs-on: ubuntu-24.04
     permissions:
