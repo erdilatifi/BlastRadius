@@ -19,6 +19,7 @@ export function Incidents() {
 							"Detect",
 							"Recover",
 							"Post-mortem",
+							"Fix",
 						]}
 						rows={incidents.map((i) => [
 							i.fingerprint,
@@ -41,6 +42,13 @@ export function Incidents() {
 									>
 										draft
 									</button>
+								),
+								i.fix?.startsWith("https://") ? (
+									<a key="fix" className="text-blue-700 underline" href={i.fix}>
+										fix PR
+									</a>
+								) : (
+									(i.fix ?? "–")
 								),
 							],
 						])}

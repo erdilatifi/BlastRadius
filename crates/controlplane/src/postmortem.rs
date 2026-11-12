@@ -1,9 +1,8 @@
 use std::fmt::Write;
 
+use brcore::RELEASE_WINDOW;
 use k8s_openapi::jiff::Timestamp;
 use serde::Serialize;
-
-const RELEASE_WINDOW: i64 = 15 * 60;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

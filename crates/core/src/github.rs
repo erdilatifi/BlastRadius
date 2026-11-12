@@ -2,6 +2,13 @@ use anyhow::{Context, Result};
 use reqwest::{Client, Method, RequestBuilder};
 use serde_json::{Value, json};
 
+pub struct Commit {
+    pub sha: String,
+    pub parent: String,
+    pub at: String,
+    pub title: String,
+}
+
 pub enum Change {
     Write(String),
     Delete,
@@ -21,16 +28,43 @@ impl GitHub {
     }
 
     fn req(&self, method: Method, path: &str) -> RequestBuilder {
-        let url = format!("{}/repos/{}/{path}", self.api, self.repo);
-        self.http.request(method, url).bearer_auth(&self.token).header("Accept", "application/vnd.github+json")
+        let req = self.http.request(method, format!("{}/repos/{}/{path}", self.api, self.repo));
+        if self.token.is_empty() { req } else { req.bearer_auth(&self.token) }
     }
 
     async fn send(&self, req: RequestBuilder) -> Result<Value> {
-        let res = req.send().await?;
+        let res = req.header("Accept", "application/vnd.github+json").send().await?;
         let status = res.status();
         let body: Value = res.json().await.unwrap_or(Value::Null);
         anyhow::ensure!(status.is_success(), "GitHub answered {status}: {}", body["message"].as_str().unwrap_or(""));
         Ok(body)
+    }
+
+    pub async fn commits(&self, path: &str, since: &str) -> Result<Vec<Commit>> {
+        let list = self.send(self.req(Method::GET, &format!("commits?path={path}&since={since}"))).await?;
+        Ok(list
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|c| {
+                Some(Commit {
+                    sha: c["sha"].as_str()?.into(),
+                    parent: c["parents"][0]["sha"].as_str()?.into(),
+                    at: c["commit"]["committer"]["date"].as_str()?.into(),
+                    title: c["commit"]["message"].as_str()?.lines().next()?.into(),
+                })
+            })
+            .collect())
+    }
+
+    pub async fn file(&self, path: &str, at: &str) -> Result<String> {
+        let req = self.req(Method::GET, &format!("contents/{path}?ref={at}"));
+        Ok(req.header("Accept", "application/vnd.github.raw+json").send().await?.error_for_status()?.text().await?)
+    }
+
+    pub async fn open_branches(&self) -> Result<Vec<String>> {
+        let list = self.send(self.req(Method::GET, "pulls?state=open&per_page=100")).await?;
+        Ok(list.as_array().into_iter().flatten().filter_map(|p| p["head"]["ref"].as_str().map(Into::into)).collect())
     }
 
     async fn branch(&self, branch: &str) -> Result<()> {
@@ -259,6 +293,38 @@ mod tests {
         let gh = GitHub::new(&s.uri(), "o/r", "t").unwrap();
         let e = gh.open_pr("b", "f", Change::Delete, "t", "").await.unwrap_err();
         assert_eq!(e.to_string(), "GitHub answered 401 Unauthorized: Bad credentials");
+    }
+
+    #[tokio::test]
+    async fn reads_history_and_files_without_a_token() {
+        let s = MockServer::start().await;
+        let commit = json!({"sha": "c2", "parents": [{"sha": "c1"}], "commit": {"message": "Bump
+
+body", "committer": {"date": "2026-11-12T08:00:00Z"}}});
+        Mock::given(method("GET"))
+            .and(path("/repos/o/r/commits"))
+            .and(query_param("path", "tenants/acme"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([commit])))
+            .mount(&s)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/o/r/contents/tenants/acme/values.yaml"))
+            .and(query_param("ref", "c1"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(
+                "name: acme
+",
+            ))
+            .mount(&s)
+            .await;
+        let gh = GitHub::new(&s.uri(), "o/r", "").unwrap();
+        let commits = gh.commits("tenants/acme", "2026-11-11T08:00:00Z").await.unwrap();
+        assert_eq!((commits[0].parent.as_str(), commits[0].title.as_str()), ("c1", "Bump"));
+        assert_eq!(
+            gh.file("tenants/acme/values.yaml", "c1").await.unwrap(),
+            "name: acme
+"
+        );
+        assert!(s.received_requests().await.unwrap().iter().all(|r| !r.headers.contains_key("authorization")));
     }
 
     #[test]

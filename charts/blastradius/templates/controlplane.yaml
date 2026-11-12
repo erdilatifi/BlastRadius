@@ -78,10 +78,12 @@ spec:
               value: {{ .Values.controlplane.tag }}
             - name: SCRIBE_MODE
               value: {{ .Values.scribe.mode }}
+            - name: REMEDIATION_MODE
+              value: {{ .Values.remediation.mode }}
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: scribe-github
+                  name: controlplane-github
                   key: token
                   optional: true
           ports:

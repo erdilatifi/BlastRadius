@@ -15,7 +15,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use axum::Router;
 use axum::routing::{get, post};
-use brcore::{Amount, Tier};
+use brcore::{Amount, GitHub, Tier};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use serde::Deserialize;
 use tokio::net::TcpListener;
@@ -35,9 +35,11 @@ struct Config {
 }
 
 impl Config {
-    fn from_env() -> Config {
+    fn from_env() -> Result<Config> {
         let var = |key: &str, default: &str| env::var(key).unwrap_or_else(|_| default.into());
-        Config {
+        let token = var("GITHUB_TOKEN", "");
+        let pr_mode = |key: &str| !token.is_empty() && var(key, "") == "pr";
+        Ok(Config {
             prometheus: var("PROMETHEUS_URL", "http://prometheus-operated.monitoring:9090"),
             traefik: var("TRAEFIK_URL", "http://traefik.kube-system"),
             platform: var("PLATFORM_FILE", "/etc/blastradius/platform.yaml").into(),
@@ -45,14 +47,17 @@ impl Config {
             commit: var("COMMIT", "unknown"),
             scribe: Scribe {
                 loki: var("LOKI_URL", "http://loki.monitoring:3100"),
-                api: var("GITHUB_API", "https://api.github.com"),
-                repo: var("GITHUB_REPO", "erdilatifi/BlastRadius"),
-                token: env::var("GITHUB_TOKEN")
-                    .ok()
-                    .filter(|t| !t.is_empty() && var("SCRIBE_MODE", "artifact") == "pr"),
+                github: GitHub::new(
+                    &var("GITHUB_API", "https://api.github.com"),
+                    &var("GITHUB_REPO", "erdilatifi/BlastRadius"),
+                    &token,
+                )?,
+                drafts: pr_mode("SCRIBE_MODE"),
+                fixes: pr_mode("REMEDIATION_MODE"),
                 incidents: Default::default(),
+                opened: Default::default(),
             },
-        }
+        })
     }
 }
 
@@ -73,7 +78,7 @@ pub struct State {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt().json().init();
-    let config = Config::from_env();
+    let config = Config::from_env()?;
     let platform =
         std::fs::read_to_string(&config.platform).with_context(|| format!("read {}", config.platform.display()))?;
     let http = reqwest::Client::builder().timeout(Duration::from_secs(5)).build()?;
@@ -102,10 +107,6 @@ async fn main() -> Result<()> {
         .with_state(state);
     let listener = TcpListener::bind("0.0.0.0:8080").await?;
     tracing::info!("listening on 8080");
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            tokio::signal::ctrl_c().await.ok();
-        })
-        .await?;
+    axum::serve(listener, app).await?;
     Ok(())
 }

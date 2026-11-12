@@ -3,3 +3,5 @@ controlplane:
   tag: sha-ca44e2d
 scribe:
   mode: artifact
+remediation:
+  mode: dry-run

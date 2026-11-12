@@ -24,8 +24,11 @@ cargo run -q -p brctl -- chaos run pod-kill initech | tee /tmp/run.txt
 check "pod-kill run finished with a score" 1 "$(grep -c '^blast radius' /tmp/run.txt)"
 check "the platform namespace has no chaos objects" 0 "$(kubectl get podchaos -n blastradius-system -o name | wc -l)"
 cargo run -q -p brctl -- ledger export --environment ci | jq -c '{experiment, target, phase, blast: .score.blastRadius, invalid: .score.invalid}'
-draft=$(curl -s localhost:8080/api/incidents | jq -r '.[] | select(.tenant == "acme" and .alert == "TenantAvailabilityFastBurn") | .markdown')
+incident=$(curl -s localhost:8080/api/incidents | jq -c '.[] | select(.tenant == "acme" and .alert == "TenantAvailabilityFastBurn")')
+draft=$(jq -r .markdown <<<"$incident")
 echo "$draft"
+jq -r .fix <<<"$incident"
+check "remediation decided in dry run" 1 "$(jq -r .fix <<<"$incident" | grep -cE '^(Dry run|No playbook matched)')"
 check "the scribe drafted acme's post-mortem" 1 "$(grep -c '^# Post-mortem draft: TenantAvailabilityFastBurn on acme' <<<"$draft")"
 check "the draft quotes acme's error logs" 1 "$(grep -c -m1 'quote failed: injected fault' <<<"$draft")"
 exit $failed

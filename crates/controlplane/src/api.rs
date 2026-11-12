@@ -8,7 +8,7 @@ use axum::response::{IntoResponse, Response};
 use brcore::{Amount, GATE_PERCENT};
 use serde::{Deserialize, Serialize};
 
-use crate::runs::{self, Experiment, Refusal, Run};
+use crate::runs::{self, Experiment, Run};
 use crate::sources::{AppStatus, TenantRef};
 use crate::{Platform, State};
 
@@ -126,12 +126,7 @@ pub struct StartRun {
 pub async fn start_run(Extract(state): Extract<Arc<State>>, Json(body): Json<StartRun>) -> Response {
     match runs::start(state, &body.experiment, &body.tenant).await {
         Ok(run) => (StatusCode::ACCEPTED, Json(run)).into_response(),
-        Err(Refusal::UnknownExperiment) => (StatusCode::NOT_FOUND, "no such experiment in the catalog").into_response(),
-        Err(Refusal::NotOptedIn) => {
-            (StatusCode::FORBIDDEN, "only tenant namespaces that opted in to chaos can be targeted").into_response()
-        }
-        Err(Refusal::Busy) => (StatusCode::CONFLICT, "another run is in progress").into_response(),
-        Err(Refusal::Failed(e)) => Failure(e).into_response(),
+        Err(refusal) => refusal.into_response(),
     }
 }
 

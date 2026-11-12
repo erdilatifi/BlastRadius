@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
+use axum::http::StatusCode;
 use k8s_openapi::api::core::v1::Pod;
 use kube::Api;
 use kube::api::{ApiResource, DeleteParams, DynamicObject, GroupVersionKind, ListParams, PostParams};
@@ -79,13 +80,6 @@ pub struct Run {
     error: Option<String>,
 }
 
-pub enum Refusal {
-    UnknownExperiment,
-    NotOptedIn,
-    Busy,
-    Failed(anyhow::Error),
-}
-
 pub struct Runs {
     commit: String,
     list: Mutex<Vec<Run>>,
@@ -121,12 +115,15 @@ impl Runs {
     }
 }
 
-pub async fn start(state: Arc<State>, experiment: &str, target: &str) -> Result<Run, Refusal> {
+pub async fn start(state: Arc<State>, experiment: &str, target: &str) -> Result<Run, (StatusCode, String)> {
     let config = &state.platform.chaos;
-    let plan = config.experiments.get(experiment).cloned().ok_or(Refusal::UnknownExperiment)?;
+    let refuse = |code, why: &str| (code, why.to_string());
+    let plan = config.experiments.get(experiment).cloned();
+    let plan = plan.ok_or(refuse(StatusCode::NOT_FOUND, "no such experiment in the catalog"))?;
     let valid = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-';
-    if !target.chars().all(valid) || !state.sources.opted_in(target).await.map_err(Refusal::Failed)? {
-        return Err(Refusal::NotOptedIn);
+    let opted_in = state.sources.opted_in(target).await.map_err(|e| (StatusCode::BAD_GATEWAY, format!("{e:#}")))?;
+    if !target.chars().all(valid) || !opted_in {
+        return Err(refuse(StatusCode::FORBIDDEN, "only tenant namespaces that opted in to chaos can be targeted"));
     }
     let started_at = now();
     let run = Run {
@@ -141,7 +138,7 @@ pub async fn start(state: Arc<State>, experiment: &str, target: &str) -> Result<
     {
         let mut list = state.runs.list.lock().unwrap_or_else(|e| e.into_inner());
         if list.iter().any(|r| !matches!(r.phase, Phase::Done | Phase::Failed)) {
-            return Err(Refusal::Busy);
+            return Err(refuse(StatusCode::CONFLICT, "another run is in progress"));
         }
         list.push(run.clone());
     }
@@ -205,13 +202,6 @@ async fn timeline(state: &State, id: &str, plan: &Experiment) -> Result<()> {
     let during = windows(state, removed_at, removed_at - injected_at).await?;
     let tenants: Vec<String> = state.sources.tenants().await?.into_iter().map(|t| t.name).collect();
     let score = score::score(&config.thresholds, &run.target, &tenants, &baseline, &during);
-    let labels = [("experiment", run.experiment.clone()), ("target", run.target.clone())];
-    if let Some(n) = score.blast_radius {
-        metrics::gauge!("blastradius_run_impacted_bystanders", &labels).set(n as f64);
-    }
-    if let Some(seconds) = recovered.map(|at| at - removed_at) {
-        metrics::gauge!("blastradius_recovery_seconds", &labels).set(seconds as f64);
-    }
     state.runs.update(id, |r| r.score = Some(score));
     Ok(())
 }
