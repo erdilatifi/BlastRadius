@@ -111,3 +111,13 @@ impl Sources {
             .collect())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[tokio::test]
+    async fn tls_clients_build_with_one_crypto_provider() {
+        let config = kube::Config::new("https://127.0.0.1:6443".parse().unwrap());
+        kube::Client::try_from(config).unwrap();
+        reqwest::Client::builder().build().unwrap();
+    }
+}
