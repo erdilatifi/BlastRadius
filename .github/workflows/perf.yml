@@ -1,0 +1,39 @@
+name: perf
+
+on:
+  workflow_dispatch:
+    inputs:
+      label:
+        description: Name of this result set, such as baseline
+        required: true
+
+permissions: {}
+
+jobs:
+  load:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      TF_VAR_revision: ${{ github.sha }}
+      KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
+      LABEL: ${{ inputs.label }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: scripts/toolchain.sh terraform kubectl k3d just k6
+      - run: just up ci
+      - run: |
+          for t in acme globex; do
+            kubectl -n argocd wait --for=create "application/tenant-$t" --timeout=5m
+            kubectl -n argocd wait --for=jsonpath='{.status.health.status}'=Healthy "application/tenant-$t" --timeout=5m
+          done
+      - run: scripts/perf.sh "$RUNNER_TEMP/$LABEL.csv" acme globex
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: perf-${{ inputs.label }}
+          path: ${{ runner.temp }}/${{ inputs.label }}.csv
+      - if: always()
+        run: just down
