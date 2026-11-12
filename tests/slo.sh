@@ -7,7 +7,7 @@ pids=()
 trap 'kill "${pids[@]}" 2>/dev/null || true' EXIT
 
 forward() {
-  kubectl "${@:1:$#-1}" port-forward "${@: -1}" >/dev/null &
+  kubectl port-forward "$@" >/dev/null &
   pids+=($!)
 }
 
