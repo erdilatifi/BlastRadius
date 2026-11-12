@@ -117,7 +117,7 @@ jobs:
           done
           platform=(-f charts/tenant/values.yaml -f platform/capacity.yaml -f charts/blastradius/values.yaml)
           helm lint --strict charts/blastradius "${platform[@]}"
-          helm template blastradius charts/blastradius -n blastradius-system "${platform[@]}" | validate
+          helm template blastradius charts/blastradius "${platform[@]}" | validate
       - run: scripts/check-runbooks.sh
       - run: kyverno test tests/admission
 

@@ -2,6 +2,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: controlplane
+  namespace: blastradius-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -26,12 +27,13 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: controlplane
-    namespace: {{ .Release.Namespace }}
+    namespace: blastradius-system
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: platform
+  namespace: blastradius-system
 data:
   platform.yaml: |
     tiers:
@@ -43,6 +45,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: controlplane
+  namespace: blastradius-system
 spec:
   replicas: 1
   selector:
@@ -106,6 +109,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: controlplane
+  namespace: blastradius-system
   labels:
     app.kubernetes.io/name: controlplane
 spec:
@@ -120,6 +124,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: controlplane
+  namespace: blastradius-system
 spec:
   selector:
     matchLabels:
@@ -132,6 +137,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: console-auth
+  namespace: blastradius-system
 spec:
   basicAuth:
     secret: console-auth
@@ -140,8 +146,9 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: console
+  namespace: blastradius-system
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-console-auth@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: blastradius-system-console-auth@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
@@ -160,6 +167,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: controlplane
+  namespace: blastradius-system
 spec:
   podSelector:
     matchLabels:
