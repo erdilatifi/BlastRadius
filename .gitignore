@@ -9,3 +9,4 @@ __pycache__/
 platform/argocd/charts/
 platform/argocd/Chart.lock
 terraform/cluster/kubeconfig
+terraform/cluster/console-password

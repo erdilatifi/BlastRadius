@@ -1,0 +1,176 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: controlplane
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: blastradius-controlplane
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, events]
+    verbs: [get, list, watch]
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: blastradius-controlplane
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: blastradius-controlplane
+subjects:
+  - kind: ServiceAccount
+    name: controlplane
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: platform
+data:
+  platform.yaml: |
+    tiers:
+      {{- toYaml .Values.tiers | nindent 6 }}
+    capacity:
+      {{- toYaml (pick .Values "cpuMillis" "memoryMiB" "pods") | nindent 6 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controlplane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: controlplane
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: controlplane
+      annotations:
+        checksum/platform: {{ pick .Values "tiers" "cpuMillis" "memoryMiB" "pods" | toYaml | sha256sum }}
+    spec:
+      serviceAccountName: controlplane
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: controlplane
+          image: {{ .Values.controlplane.repository }}:{{ required "controlplane.tag is required" .Values.controlplane.tag }}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+          volumeMounts:
+            - name: platform
+              mountPath: /etc/blastradius
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: platform
+          configMap:
+            name: platform
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: controlplane
+  labels:
+    app.kubernetes.io/name: controlplane
+spec:
+  selector:
+    app.kubernetes.io/name: controlplane
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: controlplane
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: controlplane
+  endpoints:
+    - port: http
+      path: /metrics
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: console-auth
+spec:
+  basicAuth:
+    secret: console-auth
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: console
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-console-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: blastradius.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: controlplane
+                port:
+                  name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: controlplane
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: controlplane
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values: [kube-system, monitoring]
+      ports:
+        - port: http
