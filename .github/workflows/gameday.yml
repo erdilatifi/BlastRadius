@@ -26,7 +26,7 @@ jobs:
       issues: write
     env:
       GH_TOKEN: ${{ github.token }}
-      TF_VAR_revision: ${{ github.sha }}
+      TF_VAR_revision: ${{ github.ref_name }}
       KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
       EXPERIMENTS: ${{ inputs.experiments }}
     steps:
