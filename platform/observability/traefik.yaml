@@ -8,6 +8,15 @@ spec:
     metrics:
       prometheus:
         buckets: "0.005,0.01,0.025,0.05,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.75,1,2.5"
+    deployment:
+      replicas: 2
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: traefik
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
