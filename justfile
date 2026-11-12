@@ -4,12 +4,12 @@ doctor:
     for tool in git docker python3 cargo rustc node npm kubectl k3d terraform tflint helm kyverno trivy cosign k6 just; do
       case $tool in
         kubectl) args="version --client" ;;
-        k3d|kyverno|cosign|k6|terraform|tflint) args="version" ;;
+        k3d|kyverno|cosign|k6|terraform) args="version" ;;
         helm) args="version --short" ;;
         *) args="--version" ;;
       esac
       if command -v "$tool" >/dev/null; then
-        printf '%-10s %s\n' "$tool" "$($tool $args 2>&1 | grep -m1 -oE '[0-9]+\.[0-9]+(\.[0-9]+)?')"
+        printf '%-10s %s\n' "$tool" "$($tool $args 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)"
       else
         printf '%-10s MISSING\n' "$tool"
         status=1
