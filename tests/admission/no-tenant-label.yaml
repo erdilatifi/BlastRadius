@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: workload
-          image: ghcr.io/erdilatifi/blastradius/workload:sha-f8eeeaf
+          image: ghcr.io/erdilatifi/blastradius/workload:sha-7f42d6c
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

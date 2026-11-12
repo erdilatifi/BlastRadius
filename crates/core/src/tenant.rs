@@ -262,7 +262,9 @@ mod tests {
     use super::*;
 
     fn repo() -> Repo {
-        Repo::load(Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))).unwrap()
+        let mut r = Repo::load(Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))).unwrap();
+        r.tenants.retain(|t| t.name == "acme" || t.name == "globex");
+        r
     }
 
     fn err(repo: &Repo, t: Tenant) -> String {
@@ -272,7 +274,7 @@ mod tests {
 
     #[test]
     fn committed_tenants_pass() {
-        let r = repo();
+        let r = Repo::load(Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))).unwrap();
         r.check().unwrap();
         assert_eq!(r.slug, "erdilatifi/BlastRadius");
     }
