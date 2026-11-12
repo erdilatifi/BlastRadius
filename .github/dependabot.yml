@@ -16,3 +16,7 @@ updates:
     directory: /reports
     schedule:
       interval: weekly
+  - package-ecosystem: docker
+    directory: /crates/workload
+    schedule:
+      interval: weekly
