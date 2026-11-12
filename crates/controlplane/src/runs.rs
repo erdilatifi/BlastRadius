@@ -121,8 +121,8 @@ pub async fn start(state: Arc<State>, experiment: &str, target: &str) -> Result<
     let plan = config.experiments.get(experiment).cloned();
     let plan = plan.ok_or(refuse(StatusCode::NOT_FOUND, "no such experiment in the catalog"))?;
     let valid = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-';
-    let opted_in = state.sources.opted_in(target).await.map_err(|e| (StatusCode::BAD_GATEWAY, format!("{e:#}")))?;
-    if !target.chars().all(valid) || !opted_in {
+    let lookup = |e: anyhow::Error| (StatusCode::BAD_GATEWAY, format!("{e:#}"));
+    if !target.chars().all(valid) || !state.sources.opted_in(target).await.map_err(lookup)? {
         return Err(refuse(StatusCode::FORBIDDEN, "only tenant namespaces that opted in to chaos can be targeted"));
     }
     let started_at = now();
