@@ -64,6 +64,17 @@ export type Run = {
 	error: string | null;
 };
 
+export type Incident = {
+	fingerprint: string;
+	alert: string;
+	tenant: string;
+	firedAt: number;
+	resolvedAt: number | null;
+	detectSeconds: number | null;
+	markdown: string;
+	pr: string | null;
+};
+
 async function get<T>(path: string): Promise<T> {
 	const response = await fetch(path);
 	if (!response.ok)
@@ -91,6 +102,12 @@ export const useExperiments = () =>
 
 export const useRuns = () =>
 	useQuery({ queryKey: ["runs"], queryFn: () => get<Run[]>("/api/runs") });
+
+export const useIncidents = () =>
+	useQuery({
+		queryKey: ["incidents"],
+		queryFn: () => get<Incident[]>("/api/incidents"),
+	});
 
 export function useStartRun() {
 	const client = useQueryClient();

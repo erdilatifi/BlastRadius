@@ -1,0 +1,45 @@
+---
+source: crates/controlplane/src/postmortem.rs
+expression: render(&facts)
+---
+# Post-mortem draft: TenantAvailabilityFastBurn on acme
+
+Drafted by the Incident Scribe from evidence. Root cause, fix and prevention are left empty on purpose.
+
+## Summary
+
+acme is burning its availability error budget 14.4x too fast. Fired 2027-01-15 08:00:00 UTC, resolved 2027-01-15 08:10:00 UTC, 10 min later.
+
+## Impact at firing
+
+| Signal | Value |
+|---|---|
+| Error ratio, 5m | 50.0% |
+
+## Timeline (UTC)
+
+| Time | Source | Event |
+|---|---|---|
+| 2027-01-15 07:58:00 | chaos | error-burst injected |
+| 2027-01-15 07:59:30 | loki | quote failed \| injected fault |
+| 2027-01-15 08:00:00 | alertmanager | TenantAvailabilityFastBurn fired |
+
+## Suspected cause
+
+- Chaos experiment `error-burst` was injected.
+
+## Runbook
+
+https://example.com/runbooks/tenant-availability-burn.md
+
+## Root cause
+
+_For a human to write. Describe systems and decisions, not people._
+
+## Fix
+
+_For a human to write. Describe systems and decisions, not people._
+
+## Prevention
+
+_For a human to write. Describe systems and decisions, not people._

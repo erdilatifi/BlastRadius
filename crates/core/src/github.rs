@@ -17,72 +17,79 @@ pub struct GitHub {
 impl GitHub {
     pub fn new(api: &str, repo: &str, token: &str) -> Result<GitHub> {
         let http = Client::builder().user_agent("brctl").build()?;
-        Ok(GitHub {
-            http,
-            api: api.trim_end_matches('/').into(),
-            repo: repo.into(),
-            token: token.into(),
-        })
+        Ok(GitHub { http, api: api.trim_end_matches('/').into(), repo: repo.into(), token: token.into() })
     }
 
     fn req(&self, method: Method, path: &str) -> RequestBuilder {
         let url = format!("{}/repos/{}/{path}", self.api, self.repo);
-        self.http
-            .request(method, url)
-            .bearer_auth(&self.token)
-            .header("Accept", "application/vnd.github+json")
+        self.http.request(method, url).bearer_auth(&self.token).header("Accept", "application/vnd.github+json")
     }
 
     async fn send(&self, req: RequestBuilder) -> Result<Value> {
         let res = req.send().await?;
         let status = res.status();
         let body: Value = res.json().await.unwrap_or(Value::Null);
-        anyhow::ensure!(
-            status.is_success(),
-            "GitHub answered {status}: {}",
-            body["message"].as_str().unwrap_or("")
-        );
+        anyhow::ensure!(status.is_success(), "GitHub answered {status}: {}", body["message"].as_str().unwrap_or(""));
         Ok(body)
     }
 
-    pub async fn open_pr(
+    async fn branch(&self, branch: &str) -> Result<()> {
+        let main = self.send(self.req(Method::GET, "git/ref/heads/main")).await?;
+        let sha = main["object"]["sha"].as_str().context("main has no sha")?;
+        let refs = json!({"ref": format!("refs/heads/{branch}"), "sha": sha});
+        self.send(self.req(Method::POST, "git/refs").json(&refs)).await?;
+        Ok(())
+    }
+
+    pub async fn upsert_draft(
         &self,
         branch: &str,
         path: &str,
-        change: Change,
+        text: &str,
         title: &str,
-        body: &str,
+        labels: &[&str],
     ) -> Result<String> {
-        let main = self
-            .send(self.req(Method::GET, "git/ref/heads/main"))
-            .await?;
-        let sha = main["object"]["sha"].as_str().context("main has no sha")?;
-        let refs = json!({"ref": format!("refs/heads/{branch}"), "sha": sha});
-        self.send(self.req(Method::POST, "git/refs").json(&refs))
-            .await?;
+        let exists = self.req(Method::GET, &format!("git/ref/heads/{branch}"));
+        if self.send(exists).await.is_err() {
+            self.branch(branch).await?;
+        }
+        let file = format!("contents/{path}");
+        let current = self.req(Method::GET, &format!("{file}?ref={branch}"));
+        let mut put = json!({"message": title, "branch": branch, "content": base64(text.as_bytes())});
+        if let Ok(current) = self.send(current).await {
+            put["sha"] = current["sha"].clone();
+        }
+        self.send(self.req(Method::PUT, &file).json(&put)).await?;
+        let owner = self.repo.split('/').next().unwrap_or_default();
+        let open = self.req(Method::GET, &format!("pulls?state=open&head={owner}:{branch}"));
+        if let Some(url) = self.send(open).await?[0]["html_url"].as_str() {
+            return Ok(url.into());
+        }
+        let pr = json!({"title": title, "head": branch, "base": "main", "body": title, "draft": true});
+        let pr = self.send(self.req(Method::POST, "pulls").json(&pr)).await?;
+        let labeled = format!("issues/{}/labels", pr["number"]);
+        self.send(self.req(Method::POST, &labeled).json(&json!({"labels": labels}))).await?;
+        Ok(pr["html_url"].as_str().context("pull request has no url")?.into())
+    }
+
+    pub async fn open_pr(&self, branch: &str, path: &str, change: Change, title: &str, body: &str) -> Result<String> {
+        self.branch(branch).await?;
         let file = format!("contents/{path}");
         match change {
             Change::Write(text) => {
-                let put =
-                    json!({"message": title, "branch": branch, "content": base64(text.as_bytes())});
+                let put = json!({"message": title, "branch": branch, "content": base64(text.as_bytes())});
                 self.send(self.req(Method::PUT, &file).json(&put)).await?;
             }
             Change::Delete => {
-                let current = self
-                    .send(self.req(Method::GET, &format!("{file}?ref={branch}")))
-                    .await?;
+                let current = self.send(self.req(Method::GET, &format!("{file}?ref={branch}"))).await?;
                 let sha = current["sha"].as_str().context("file has no sha")?;
                 let del = json!({"message": title, "branch": branch, "sha": sha});
-                self.send(self.req(Method::DELETE, &file).json(&del))
-                    .await?;
+                self.send(self.req(Method::DELETE, &file).json(&del)).await?;
             }
         }
         let pr = json!({"title": title, "head": branch, "base": "main", "body": body});
         let pr = self.send(self.req(Method::POST, "pulls").json(&pr)).await?;
-        Ok(pr["html_url"]
-            .as_str()
-            .context("pull request has no url")?
-            .into())
+        Ok(pr["html_url"].as_str().context("pull request has no url")?.into())
     }
 }
 
@@ -90,16 +97,9 @@ fn base64(bytes: &[u8]) -> String {
     const ABC: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::new();
     for chunk in bytes.chunks(3) {
-        let n = chunk
-            .iter()
-            .enumerate()
-            .fold(0u32, |n, (i, &b)| n | (b as u32) << (16 - 8 * i));
+        let n = chunk.iter().enumerate().fold(0u32, |n, (i, &b)| n | (b as u32) << (16 - 8 * i));
         for i in 0..4 {
-            let c = if i <= chunk.len() {
-                ABC[(n >> (18 - 6 * i) & 63) as usize] as char
-            } else {
-                '='
-            };
+            let c = if i <= chunk.len() { ABC[(n >> (18 - 6 * i) & 63) as usize] as char } else { '=' };
             out.push(c);
         }
     }
@@ -123,18 +123,14 @@ mod tests {
             .await;
         Mock::given(method("POST"))
             .and(path("/repos/o/r/git/refs"))
-            .and(body_partial_json(
-                json!({"ref": "refs/heads/b", "sha": "abc"}),
-            ))
+            .and(body_partial_json(json!({"ref": "refs/heads/b", "sha": "abc"})))
             .respond_with(ok(json!({})))
             .expect(1)
             .mount(&s)
             .await;
         Mock::given(method("POST"))
             .and(path("/repos/o/r/pulls"))
-            .and(body_partial_json(
-                json!({"head": "b", "base": "main", "title": "t"}),
-            ))
+            .and(body_partial_json(json!({"head": "b", "base": "main", "title": "t"})))
             .respond_with(ok(json!({"html_url": "https://pr/1"})))
             .mount(&s)
             .await;
@@ -146,24 +142,13 @@ mod tests {
         let s = server().await;
         Mock::given(method("PUT"))
             .and(path("/repos/o/r/contents/tenants/x/values.yaml"))
-            .and(body_partial_json(
-                json!({"branch": "b", "content": "bmFtZTogeAo="}),
-            ))
+            .and(body_partial_json(json!({"branch": "b", "content": "bmFtZTogeAo="})))
             .respond_with(ResponseTemplate::new(201).set_body_json(json!({})))
             .expect(1)
             .mount(&s)
             .await;
         let gh = GitHub::new(&s.uri(), "o/r", "t").unwrap();
-        let url = gh
-            .open_pr(
-                "b",
-                "tenants/x/values.yaml",
-                Change::Write("name: x\n".into()),
-                "t",
-                "",
-            )
-            .await
-            .unwrap();
+        let url = gh.open_pr("b", "tenants/x/values.yaml", Change::Write("name: x\n".into()), "t", "").await.unwrap();
         assert_eq!(url, "https://pr/1");
     }
 
@@ -184,41 +169,101 @@ mod tests {
             .mount(&s)
             .await;
         let gh = GitHub::new(&s.uri(), "o/r", "t").unwrap();
-        assert_eq!(
-            gh.open_pr("b", "f", Change::Delete, "t", "").await.unwrap(),
-            "https://pr/1"
-        );
+        assert_eq!(gh.open_pr("b", "f", Change::Delete, "t", "").await.unwrap(), "https://pr/1");
+    }
+
+    async fn pulls(s: &MockServer, open: Value) {
+        Mock::given(method("GET"))
+            .and(path("/repos/o/r/pulls"))
+            .and(query_param("head", "o:d"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(open))
+            .mount(s)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn upsert_opens_a_labelled_draft_on_a_new_branch() {
+        let s = MockServer::start().await;
+        pulls(&s, json!([])).await;
+        Mock::given(method("GET"))
+            .and(path("/repos/o/r/git/ref/heads/main"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"object": {"sha": "abc"}})))
+            .mount(&s)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/repos/o/r/git/refs"))
+            .and(body_partial_json(json!({"ref": "refs/heads/d", "sha": "abc"})))
+            .respond_with(ResponseTemplate::new(201).set_body_json(json!({})))
+            .expect(1)
+            .mount(&s)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/repos/o/r/contents/p.md"))
+            .and(body_partial_json(json!({"branch": "d", "content": "eA=="})))
+            .respond_with(ResponseTemplate::new(201).set_body_json(json!({})))
+            .expect(1)
+            .mount(&s)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/repos/o/r/pulls"))
+            .and(body_partial_json(json!({"head": "d", "draft": true})))
+            .respond_with(ResponseTemplate::new(201).set_body_json(json!({"number": 7, "html_url": "https://pr/7"})))
+            .expect(1)
+            .mount(&s)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/repos/o/r/issues/7/labels"))
+            .and(body_partial_json(json!({"labels": ["postmortem"]})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+            .expect(1)
+            .mount(&s)
+            .await;
+        let gh = GitHub::new(&s.uri(), "o/r", "t").unwrap();
+        let url = gh.upsert_draft("d", "p.md", "x", "t", &["postmortem"]);
+        assert_eq!(url.await.unwrap(), "https://pr/7");
+    }
+
+    #[tokio::test]
+    async fn upsert_updates_the_open_draft() {
+        let s = MockServer::start().await;
+        pulls(&s, json!([{"html_url": "https://pr/7"}])).await;
+        Mock::given(method("GET"))
+            .and(path("/repos/o/r/git/ref/heads/d"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .mount(&s)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/o/r/contents/p.md"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"sha": "s1"})))
+            .mount(&s)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/repos/o/r/contents/p.md"))
+            .and(body_partial_json(json!({"sha": "s1"})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .expect(1)
+            .mount(&s)
+            .await;
+        let gh = GitHub::new(&s.uri(), "o/r", "t").unwrap();
+        let url = gh.upsert_draft("d", "p.md", "x", "t", &["postmortem"]);
+        assert_eq!(url.await.unwrap(), "https://pr/7");
     }
 
     #[tokio::test]
     async fn reports_github_errors() {
         let s = MockServer::start().await;
         Mock::given(method("GET"))
-            .respond_with(
-                ResponseTemplate::new(401).set_body_json(json!({"message": "Bad credentials"})),
-            )
+            .respond_with(ResponseTemplate::new(401).set_body_json(json!({"message": "Bad credentials"})))
             .mount(&s)
             .await;
         let gh = GitHub::new(&s.uri(), "o/r", "t").unwrap();
-        let e = gh
-            .open_pr("b", "f", Change::Delete, "t", "")
-            .await
-            .unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "GitHub answered 401 Unauthorized: Bad credentials"
-        );
+        let e = gh.open_pr("b", "f", Change::Delete, "t", "").await.unwrap_err();
+        assert_eq!(e.to_string(), "GitHub answered 401 Unauthorized: Bad credentials");
     }
 
     #[test]
     fn encodes_base64() {
-        for (raw, enc) in [
-            ("", ""),
-            ("f", "Zg=="),
-            ("fo", "Zm8="),
-            ("foo", "Zm9v"),
-            ("foob", "Zm9vYg=="),
-        ] {
+        for (raw, enc) in [("", ""), ("f", "Zg=="), ("fo", "Zm8="), ("foo", "Zm9v"), ("foob", "Zm9vYg==")] {
             assert_eq!(base64(raw.as_bytes()), enc);
         }
     }

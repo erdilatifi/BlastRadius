@@ -42,17 +42,11 @@ struct Sample {
 
 impl Sources {
     pub async fn new(http: reqwest::Client, prometheus: String) -> Result<Sources> {
-        Ok(Sources {
-            http,
-            prometheus,
-            kube: Client::try_default().await?,
-        })
+        Ok(Sources { http, prometheus, kube: Client::try_default().await? })
     }
 
     pub async fn tenants(&self) -> Result<Vec<TenantRef>> {
-        let namespaces = Api::<Namespace>::all(self.kube.clone())
-            .list(&ListParams::default().labels("tenant"))
-            .await?;
+        let namespaces = Api::<Namespace>::all(self.kube.clone()).list(&ListParams::default().labels("tenant")).await?;
         Ok(namespaces
             .into_iter()
             .filter_map(|ns| {
@@ -67,14 +61,9 @@ impl Sources {
 
     pub async fn apps(&self) -> Result<BTreeMap<String, AppStatus>> {
         let gvk = GroupVersionKind::gvk("argoproj.io", "v1alpha1", "Application");
-        let api: Api<DynamicObject> =
-            Api::namespaced_with(self.kube.clone(), "argocd", &ApiResource::from_gvk(&gvk));
+        let api: Api<DynamicObject> = Api::namespaced_with(self.kube.clone(), "argocd", &ApiResource::from_gvk(&gvk));
         let field = |app: &DynamicObject, path: &str| {
-            app.data
-                .pointer(path)
-                .and_then(|v| v.as_str())
-                .unwrap_or("Unknown")
-                .to_string()
+            app.data.pointer(path).and_then(|v| v.as_str()).unwrap_or("Unknown").to_string()
         };
         Ok(api
             .list(&ListParams::default())
@@ -92,9 +81,7 @@ impl Sources {
     }
 
     pub async fn opted_in(&self, tenant: &str) -> Result<bool> {
-        let ns = Api::<Namespace>::all(self.kube.clone())
-            .get_opt(&format!("tenant-{tenant}"))
-            .await?;
+        let ns = Api::<Namespace>::all(self.kube.clone()).get_opt(&format!("tenant-{tenant}")).await?;
         let meta = ns.map(|n| n.metadata).unwrap_or_default();
         let label = meta.labels.unwrap_or_default().remove("tenant");
         let opt_in = meta.annotations.unwrap_or_default().remove(CHAOS_OPT_IN);
@@ -105,12 +92,7 @@ impl Sources {
         self.at(label, query, None).await
     }
 
-    pub async fn at(
-        &self,
-        label: &str,
-        query: &str,
-        time: Option<u64>,
-    ) -> Result<BTreeMap<String, f64>> {
+    pub async fn at(&self, label: &str, query: &str, time: Option<u64>) -> Result<BTreeMap<String, f64>> {
         let mut params = vec![("query", query.to_string())];
         params.extend(time.map(|t| ("time", t.to_string())));
         let response: Response = self

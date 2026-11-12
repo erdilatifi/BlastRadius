@@ -32,28 +32,16 @@ fn seconds(v: &Value) -> String {
 
 impl Api {
     pub fn new(base: &str) -> Api {
-        Api {
-            http: reqwest::Client::new(),
-            base: base.trim_end_matches('/').into(),
-        }
+        Api { http: reqwest::Client::new(), base: base.trim_end_matches('/').into() }
     }
 
     async fn get(&self, path: &str) -> Result<Value> {
-        Ok(ok(self.http.get(format!("{}{path}", self.base)))
-            .await?
-            .json()
-            .await?)
+        Ok(ok(self.http.get(format!("{}{path}", self.base))).await?.json().await?)
     }
 
     pub async fn run(&self, experiment: &str, tenant: &str) -> Result<Value> {
         let body = json!({"experiment": experiment, "tenant": tenant});
-        let mut run: Value = ok(self
-            .http
-            .post(format!("{}/api/runs", self.base))
-            .json(&body))
-        .await?
-        .json()
-        .await?;
+        let mut run: Value = ok(self.http.post(format!("{}/api/runs", self.base)).json(&body)).await?.json().await?;
         let id = text(&run["id"]).to_string();
         let mut phase = String::new();
         loop {
@@ -79,17 +67,8 @@ impl Api {
             (None, why) => println!("invalid: {why}"),
         }
         for d in items(&score["tenants"]) {
-            let reasons: Vec<&str> = d["reasons"]
-                .as_array()
-                .iter()
-                .flat_map(|r| r.iter().map(text))
-                .collect();
-            println!(
-                "  {:<12} {:<9} {}",
-                text(&d["tenant"]),
-                text(&d["role"]),
-                reasons.join("; ")
-            );
+            let reasons: Vec<&str> = d["reasons"].as_array().iter().flat_map(|r| r.iter().map(text)).collect();
+            println!("  {:<12} {:<9} {}", text(&d["tenant"]), text(&d["role"]), reasons.join("; "));
         }
         Ok(run)
     }
@@ -97,11 +76,7 @@ impl Api {
     pub async fn campaign(&self, mut experiments: Vec<String>) -> Result<bool> {
         if experiments.is_empty() {
             let catalog = self.get("/api/experiments").await?;
-            experiments = catalog
-                .as_object()
-                .iter()
-                .flat_map(|c| c.keys().cloned())
-                .collect();
+            experiments = catalog.as_object().iter().flat_map(|c| c.keys().cloned()).collect();
         }
         let tenants = items(&self.get("/api/tenants").await?);
         let (mut total, mut failed) = (0, 0);
@@ -143,8 +118,6 @@ impl Api {
             let cells = ["name", "tier", "sync", "health"].map(|k| format!("{:<12}", text(&t[k])));
             println!("{}{}%", cells.concat(), t["availability"]);
         }
-        Ok(tenants
-            .iter()
-            .all(|t| t["sync"] == "Synced" && t["health"] == "Healthy"))
+        Ok(tenants.iter().all(|t| t["sync"] == "Synced" && t["health"] == "Healthy"))
     }
 }
