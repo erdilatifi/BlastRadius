@@ -19,7 +19,9 @@ jobs:
     timeout-minutes: 300
     permissions:
       contents: write
+      issues: write
     env:
+      GH_TOKEN: ${{ github.token }}
       TF_VAR_revision: ${{ github.sha }}
       KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
       EXPERIMENTS: ${{ inputs.experiments }}
@@ -41,10 +43,14 @@ jobs:
           kubectl -n blastradius-system rollout status deployment/controlplane --timeout=3m
       - run: |
           kubectl -n blastradius-system port-forward svc/controlplane 8080:8080 >/dev/null &
+          kubectl -n monitoring port-forward svc/prometheus-operated 9091:9090 >/dev/null &
           sleep 3
           target/release/brctl chaos campaign $EXPERIMENTS
           mkdir -p data
           target/release/brctl ledger export --environment actions --commit "$GITHUB_SHA" >> data/runs.jsonl
+          target/release/brctl tenant list --json > "$RUNNER_TEMP/repo.json"
+          python reports/capacity.py snapshot http://localhost:9091 "$RUNNER_TEMP/repo.json" data/usage.jsonl
+          curl -s localhost:8080/api/incidents | jq -c '.[] | del(.markdown, .signals, .timeline)' >> data/incidents.jsonl
           mkdir -p postmortems
           curl -s localhost:8080/api/incidents | jq -c '.[]' | while read -r i; do
             jq -r .markdown <<<"$i" > "postmortems/$(jq -r '"\(.tenant)-\(.fingerprint)"' <<<"$i").md"
@@ -56,9 +62,12 @@ jobs:
           if-no-files-found: ignore
       - run: python reports/scorecard.py data/runs.jsonl README.md
       - run: |
+          alarm=$(python reports/capacity.py alarm data/usage.jsonl)
+          [ -z "$alarm" ] || gh issue create --title "Capacity forecast: under 14 days to the gate" --body "$alarm"
+      - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/runs.jsonl README.md
+          git add data README.md
           git commit -m "Record game day runs"
           git pull --rebase origin main
           git push origin HEAD:main

@@ -1,0 +1,21 @@
+{{- $quota := "kube_resourcequota{type=\"hard\", namespace=~\"tenant-.*\"" }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: capacity
+  namespace: blastradius-system
+spec:
+  groups:
+    - name: capacity
+      rules:
+        - alert: PlatformCapacityNearGate
+          expr: |
+            sum({{ $quota }}, resource="requests.cpu"}) * 1000 > {{ .Values.cpuMillis }} * 0.75
+            or sum({{ $quota }}, resource="requests.memory"}) / 2^20 > {{ .Values.memoryMiB }} * 0.75
+            or sum({{ $quota }}, resource="pods"}) > {{ .Values.pods }} * 0.75
+          for: 15m
+          labels:
+            severity: ticket
+          annotations:
+            summary: Tenant quotas commit over 75% of platform capacity; onboarding stops at 85%.
+            runbook_url: https://github.com/erdilatifi/BlastRadius/blob/main/runbooks/platform-capacity.md

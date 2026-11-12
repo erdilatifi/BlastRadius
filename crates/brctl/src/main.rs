@@ -61,7 +61,10 @@ enum TenantCommand {
         dry_run: bool,
     },
     #[command(about = "List tenants and check them against the capacity gate")]
-    List,
+    List {
+        #[arg(long, help = "Print tiers, capacity and tenants as JSON for the reports")]
+        json: bool,
+    },
     #[command(about = "Open a pull request removing a tenant")]
     Rm { name: String },
 }
@@ -112,8 +115,12 @@ async fn tenant(command: TenantCommand) -> Result<()> {
                 .await?;
             println!("{url}");
         }
-        TenantCommand::List => {
+        TenantCommand::List { json } => {
             repo.check()?;
+            if json {
+                println!("{}", serde_json::to_string(&repo)?);
+                return Ok(());
+            }
             println!("{:<20} {:<8} {:>8} {:>8}", "TENANT", "TIER", "REPLICAS", "SLO");
             for t in &repo.tenants {
                 println!(

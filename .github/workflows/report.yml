@@ -1,0 +1,40 @@
+name: report
+
+on:
+  schedule:
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      week:
+        description: ISO week such as 2026-W46; empty means last week
+        default: ""
+
+permissions: {}
+
+jobs:
+  weekly:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.BOT_TOKEN || github.token }}
+      WEEK: ${{ inputs.week }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ secrets.BOT_TOKEN || github.token }}
+      - run: cat versions.env >> "$GITHUB_ENV"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: |
+          path=$(python reports/weekly.py data docs/reports "$WEEK")
+          name=$(basename "$path" .md)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "report-$name"
+          git add "$path"
+          git commit -m "Weekly report $name"
+          git push -f origin "report-$name"
+          gh pr view "report-$name" >/dev/null 2>&1 || gh pr create --base main --head "report-$name" --title "Weekly report $name" --body-file "$path"

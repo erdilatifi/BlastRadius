@@ -49,7 +49,7 @@ pub struct Amount {
     pub pods: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Tier {
     pub requests: Amount,
@@ -68,7 +68,7 @@ struct AppsValues {
     repo_url: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Repo {
     pub slug: String,
     pub tiers: BTreeMap<String, Tier>,
