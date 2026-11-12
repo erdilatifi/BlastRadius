@@ -1,3 +1,3 @@
 controlplane:
   repository: ghcr.io/erdilatifi/blastradius/controlplane
-  tag: sha-b4de45a
+  tag: sha-ca44e2d
