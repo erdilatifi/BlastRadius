@@ -36,3 +36,19 @@ reports:
     ruff check
     ruff format --check
     pytest
+
+up env:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    terraform -chdir=terraform/cluster init -input=false
+    terraform -chdir=terraform/cluster apply -input=false -auto-approve -var-file=../envs/{{env}}.tfvars
+    kubeconfig=$(terraform -chdir=terraform/cluster output -raw kubeconfig)
+    terraform -chdir=terraform/bootstrap init -input=false -reconfigure -backend-config="config_path=$kubeconfig"
+    terraform -chdir=terraform/bootstrap apply -input=false -auto-approve -var-file=../envs/{{env}}.tfvars -var="kubeconfig=$kubeconfig"
+    export KUBECONFIG=$kubeconfig
+    kubectl -n argocd wait --for=create application/argocd --timeout=5m
+    kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced application/root application/argocd --timeout=10m
+    kubectl -n argocd wait --for=jsonpath='{.status.health.status}'=Healthy application/root application/argocd --timeout=10m
+
+down:
+    terraform -chdir=terraform/cluster destroy -input=false -auto-approve

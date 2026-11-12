@@ -63,3 +63,40 @@ jobs:
       - run: ruff check
       - run: ruff format --check
       - run: pytest
+
+  iac:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: scripts/toolchain.sh terraform tflint trivy
+      - run: terraform fmt -check -recursive terraform
+      - run: |
+          for stack in terraform/cluster terraform/bootstrap; do
+            terraform -chdir=$stack init -backend=false -input=false
+            terraform -chdir=$stack validate
+          done
+      - run: tflint --recursive
+        working-directory: terraform
+      - run: trivy config --exit-code 1 terraform platform
+
+  e2e:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      TF_VAR_revision: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: scripts/toolchain.sh terraform kubectl k3d just
+      - run: just up ci
+      - if: failure()
+        run: kubectl --kubeconfig terraform/cluster/kubeconfig -n argocd get applications -o yaml
+      - if: always()
+        run: just down
+      - run: test -z "$(docker ps -aq --filter name=k3d-)$(docker network ls -q --filter name=k3d-)$(docker volume ls -q --filter name=k3d-)"
