@@ -1,0 +1,79 @@
+name: spike
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/spike.yml]
+
+permissions: {}
+
+jobs:
+  chaos-mesh:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: scripts/toolchain.sh kubectl k3d helm
+      - run: uname -a; lsmod | grep -E 'netem|sch_' || true; modinfo sch_netem || true; docker info | grep -iE 'cgroup|runtime'
+      - run: k3d cluster create spike --agents 1 --wait
+      - run: |
+          helm repo add chaos-mesh https://charts.chaos-mesh.org
+          helm install chaos-mesh chaos-mesh/chaos-mesh --version 2.8.8 -n chaos-mesh --create-namespace --wait \
+            --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/k3s/containerd/containerd.sock \
+            --set dashboard.create=false
+          kubectl create ns target
+          kubectl -n target run victim --image=busybox:1.37 -- sleep 100000
+          kubectl -n target run peer --image=busybox:1.37 -- sleep 100000
+          kubectl -n target wait --for=condition=Ready pod/victim pod/peer --timeout=120s
+      - name: PodChaos
+        continue-on-error: true
+        run: |
+          before=$(kubectl -n target get pod victim -o jsonpath='{.metadata.uid}')
+          kubectl apply -f - <<'EOF'
+          apiVersion: chaos-mesh.org/v1alpha1
+          kind: PodChaos
+          metadata: {name: kill, namespace: target}
+          spec: {action: container-kill, mode: one, containerNames: [victim], selector: {namespaces: [target], labelSelectors: {run: victim}}}
+          EOF
+          sleep 20
+          kubectl -n target get podchaos kill -o jsonpath='{.status.experiment.containerRecords}'; echo
+          kubectl -n target get pod victim -o wide
+          test "$(kubectl -n target get pod victim -o jsonpath='{.status.containerStatuses[0].restartCount}')" -ge 1
+          kubectl -n target delete podchaos kill
+      - name: StressChaos
+        continue-on-error: true
+        run: |
+          kubectl -n target wait --for=condition=Ready pod/victim --timeout=120s
+          kubectl apply -f - <<'EOF'
+          apiVersion: chaos-mesh.org/v1alpha1
+          kind: StressChaos
+          metadata: {name: cpu, namespace: target}
+          spec: {mode: one, duration: 60s, selector: {namespaces: [target], labelSelectors: {run: victim}}, stressors: {cpu: {workers: 1, load: 100}, memory: {workers: 1, size: 128MB}}}
+          EOF
+          sleep 30
+          kubectl -n target get stresschaos cpu -o jsonpath='{.status.experiment.containerRecords}'; echo
+          kubectl -n target describe stresschaos cpu | tail -15
+          docker exec k3d-spike-agent-0 sh -c 'ps aux | grep -E "stress|memStress" | grep -v grep' || docker exec k3d-spike-server-0 sh -c 'ps aux | grep -E "stress|memStress" | grep -v grep'
+          kubectl -n target get stresschaos cpu -o jsonpath='{.status.experiment.containerRecords[0].phase}' | grep -q Injected
+      - name: NetworkChaos
+        continue-on-error: true
+        run: |
+          peer=$(kubectl -n target get pod peer -o jsonpath='{.status.podIP}')
+          kubectl -n target exec victim -- ping -c 5 "$peer" | tail -1
+          kubectl apply -f - <<'EOF'
+          apiVersion: chaos-mesh.org/v1alpha1
+          kind: NetworkChaos
+          metadata: {name: delay, namespace: target}
+          spec: {action: delay, mode: one, duration: 120s, selector: {namespaces: [target], labelSelectors: {run: victim}}, delay: {latency: 200ms, jitter: 0ms}}
+          EOF
+          sleep 20
+          kubectl -n target get networkchaos delay -o jsonpath='{.status.experiment.containerRecords}'; echo
+          kubectl -n target describe networkchaos delay | tail -15
+          kubectl -n target exec victim -- ping -c 5 "$peer" | tail -1
+          kubectl -n target get networkchaos delay -o jsonpath='{.status.experiment.containerRecords[0].phase}' | grep -q Injected
+      - if: always()
+        run: kubectl -n chaos-mesh logs ds/chaos-daemon --tail=40 || true
