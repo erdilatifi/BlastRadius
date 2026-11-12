@@ -39,6 +39,14 @@ jobs:
           echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/${{ matrix.name }}:sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
       - run: docker build -f crates/${{ matrix.name }}/Dockerfile -t "${{ steps.image.outputs.image }}" .
       - run: trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "${{ steps.image.outputs.image }}"
+      - if: matrix.name == 'workload'
+        run: |
+          docker run -d -p 8080:8080 "$IMAGE"
+          for path in /readyz /api/quote "/api/quote?items=1" "/api/quote?items=100"; do
+            curl -fsS --retry 10 --retry-connrefused --retry-delay 1 "localhost:8080$path" >/dev/null
+          done
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
       - run: trivy image --format cyclonedx --output sbom.cdx.json "${{ steps.image.outputs.image }}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

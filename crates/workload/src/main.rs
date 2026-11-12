@@ -115,7 +115,7 @@ fn public(app: App) -> Router {
     Router::new()
         .route("/api/quote", get(quote))
         .route("/healthz", get(|| async { "ok" }))
-        .route("/readyz", get(|| async { "ok" }))
+        .route("/readyz", get(|| async { price(1).to_string() }))
         .with_state(app)
 }
 
