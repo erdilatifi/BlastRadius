@@ -3,6 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: workload
+  namespace: tenant-{{ .Values.name }}
 spec:
   selector:
     matchLabels:
@@ -59,6 +60,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: workload
+  namespace: tenant-{{ .Values.name }}
 spec:
   selector:
     app.kubernetes.io/name: workload
@@ -74,6 +76,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: workload
+  namespace: tenant-{{ .Values.name }}
 spec:
   ingressClassName: traefik
   rules:
@@ -92,6 +95,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: workload
+  namespace: tenant-{{ .Values.name }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -111,6 +115,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: workload
+  namespace: tenant-{{ .Values.name }}
 spec:
   minAvailable: 1
   selector:

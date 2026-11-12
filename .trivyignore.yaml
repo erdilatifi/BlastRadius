@@ -1,0 +1,5 @@
+misconfigurations:
+  - id: KSV-0125
+    paths:
+      - charts/tenant/templates/workload.yaml
+    statement: Trivy does not know ghcr.io/erdilatifi/blastradius; Kyverno restrict-image-registry allows only that registry.

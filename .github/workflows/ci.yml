@@ -82,7 +82,7 @@ jobs:
           done
       - run: tflint --recursive
         working-directory: terraform
-      - run: trivy config --exit-code 1 --skip-dirs tests/admission --helm-values tenants/acme/values.yaml .
+      - run: trivy config --exit-code 1 --ignorefile .trivyignore.yaml --skip-dirs tests/admission --helm-values tenants/acme/values.yaml .
 
   manifests:
     runs-on: ubuntu-24.04
