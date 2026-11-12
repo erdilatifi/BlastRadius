@@ -15,6 +15,14 @@ spec:
         tenant: {{ required "name is required" .Values.name }}
     spec:
       priorityClassName: tenant
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          nodeTaintsPolicy: Honor
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: workload
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
