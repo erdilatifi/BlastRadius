@@ -2,7 +2,8 @@
   "name": "blastradius",
   "image": "mcr.microsoft.com/devcontainers/python:3.15-bookworm",
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/sshd:1": {}
   },
   "hostRequirements": {
     "cpus": 4,
