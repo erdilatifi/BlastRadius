@@ -81,7 +81,7 @@ jobs:
           done
       - run: tflint --recursive
         working-directory: terraform
-      - run: trivy config --exit-code 1 terraform platform
+      - run: trivy config --exit-code 1 .
 
   e2e:
     runs-on: ubuntu-24.04
