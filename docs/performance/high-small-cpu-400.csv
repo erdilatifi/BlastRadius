@@ -1,0 +1,9 @@
+tenant,tier,rate,achieved,p50_ms,p95_ms,p99_ms,errors_pct,throttled_pct,replicas
+acme,small,100,100,5,314,351,13,24,2
+acme,small,200,200,5,6,13,0,0,4
+acme,small,400,390,607,1338,1482,0,99,4
+acme,small,800,391,979,1603,1748,0,97,4
+globex,medium,100,100,5,6,10,0,0,4
+globex,medium,200,200,5,6,10,0,0,4
+globex,medium,400,389,432,2001,2117,0,98,4
+globex,medium,800,389,924,2134,2239,0,99,4
