@@ -14,11 +14,11 @@ It costs $0: clusters run in GitHub Codespaces and GitHub Actions.
 ## Scorecard
 
 <!-- scorecard:start -->
-9 chaos runs: 3 scored, 3 invalid, 3 failed. Last run 2026-11-12 16:05 UTC.
+12 chaos runs: 6 scored, 3 invalid, 3 failed. Last run 2026-11-12 17:08 UTC.
 
 | Experiment | Runs | Runs with impacted bystanders | Most impacted | Detect (median) | Recover (median) |
 |---|---|---|---|---|---|
-| `cpu-stress` | 6 | 0 | 0 | 5 s | 10 s |
+| `cpu-stress` | 9 | 0 | 0 | 5 s | 40 s |
 | `pod-kill` | 3 | 0 | – | 50 s | 5 s |
 <!-- scorecard:end -->
 
