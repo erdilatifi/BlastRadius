@@ -64,42 +64,55 @@ function Readouts() {
 	const healthy = tracked.filter((t) => t.health === "Healthy").length;
 	const live = runs.some((r) => !["done", "failed"].includes(r.phase));
 	const online = !tenants.error && tenants.data !== undefined;
+	const link = (
+		<span
+			className={cn(
+				"flex items-center gap-2 border px-2 py-1",
+				online ? "border-accent-line text-accent" : "border-crit/50 text-crit",
+			)}
+		>
+			<Dot tone={online ? "accent" : "crit"} live />
+			{online ? "LINK" : "NO LINK"}
+		</span>
+	);
 	return (
-		<div className="ml-auto hidden items-center gap-6 font-mono text-[11px] whitespace-nowrap lg:flex">
-			<span className="flex items-baseline gap-2">
-				<b className="text-[10px] font-normal tracking-widest text-text-3">
-					FLEET
-				</b>
-				{tracked.length
-					? `${healthy}/${tracked.length} OK`
-					: `${rows.length} TENANTS`}
-			</span>
-			<span className="flex items-baseline gap-2">
-				<b className="text-[10px] font-normal tracking-widest text-text-3">
-					CHAOS
-				</b>
-				<span className={live ? "text-crit" : "text-text-2"}>
-					{live ? "ARMED" : "IDLE"}
-				</span>
-			</span>
-			<span className="flex items-baseline gap-2">
-				<b className="text-[10px] font-normal tracking-widest text-text-3">
-					UTC
-				</b>
-				<Clock />
-			</span>
-			<span
-				className={cn(
-					"flex items-center gap-2 border px-2 py-1",
-					online
-						? "border-accent-line text-accent"
-						: "border-crit/50 text-crit",
+		<>
+			{/* Phones and tablets: the two readouts that need attention. */}
+			<div className="ml-auto flex items-center gap-3 font-mono text-[10px] whitespace-nowrap lg:hidden">
+				{live && (
+					<span className="flex items-center gap-1.5 text-crit">
+						<Dot tone="crit" live />
+						ARMED
+					</span>
 				)}
-			>
-				<Dot tone={online ? "accent" : "crit"} live />
-				{online ? "LINK" : "NO LINK"}
-			</span>
-		</div>
+				{link}
+			</div>
+			<div className="ml-auto hidden items-center gap-6 font-mono text-[11px] whitespace-nowrap lg:flex">
+				<span className="flex items-baseline gap-2">
+					<b className="text-[10px] font-normal tracking-widest text-text-3">
+						FLEET
+					</b>
+					{tracked.length
+						? `${healthy}/${tracked.length} OK`
+						: `${rows.length} TENANTS`}
+				</span>
+				<span className="flex items-baseline gap-2">
+					<b className="text-[10px] font-normal tracking-widest text-text-3">
+						CHAOS
+					</b>
+					<span className={live ? "text-crit" : "text-text-2"}>
+						{live ? "ARMED" : "IDLE"}
+					</span>
+				</span>
+				<span className="flex items-baseline gap-2">
+					<b className="text-[10px] font-normal tracking-widest text-text-3">
+						UTC
+					</b>
+					<Clock />
+				</span>
+				{link}
+			</div>
+		</>
 	);
 }
 
@@ -121,14 +134,14 @@ function Layout() {
 					</span>
 					<Readouts />
 				</div>
-				<nav className="mx-auto flex max-w-[1400px] gap-px overflow-x-auto px-4 sm:px-6">
+				<nav className="mx-auto flex max-w-[1400px] gap-px px-2 sm:px-6">
 					{nav.map(([path, code, label]) => (
 						<NavLink
 							key={path}
 							to={`/${path}`}
 							className={({ isActive }) =>
 								cn(
-									"group relative flex items-center gap-2 px-3 py-2.5 transition-colors",
+									"group relative flex min-h-11 flex-1 items-center justify-center gap-2 px-1 transition-colors sm:flex-none sm:px-3",
 									isActive ? "text-text" : "text-text-3 hover:text-text-2",
 								)
 							}
@@ -137,7 +150,7 @@ function Layout() {
 								<>
 									<span
 										className={cn(
-											"font-mono text-[10px]",
+											"hidden font-mono text-[10px] sm:inline",
 											isActive ? "text-accent" : "text-text-3",
 										)}
 									>
@@ -158,7 +171,7 @@ function Layout() {
 					))}
 				</nav>
 			</header>
-			<main className="mx-auto max-w-[1400px] space-y-6 px-4 py-8 sm:px-6">
+			<main className="mx-auto max-w-[1400px] space-y-6 px-4 py-6 sm:px-6 sm:py-8">
 				<Outlet />
 			</main>
 			<footer className="mx-auto flex max-w-[1400px] flex-wrap justify-between gap-2 px-4 pb-8 font-mono text-[10px] text-text-3 sm:px-6">

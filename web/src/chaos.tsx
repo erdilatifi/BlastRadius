@@ -57,7 +57,7 @@ function Stepper({ run }: { run: Run }) {
 					<li
 						key={p}
 						className={cn(
-							"relative overflow-hidden px-3 py-3",
+							"relative min-w-0 overflow-hidden px-1.5 py-2.5 sm:px-3 sm:py-3",
 							now
 								? p === "inject"
 									? "bg-crit-dim"
@@ -68,7 +68,7 @@ function Stepper({ run }: { run: Run }) {
 						<div className="font-mono text-[10px] text-text-3">0{i + 1}</div>
 						<div
 							className={cn(
-								"label mt-1.5",
+								"mt-1.5 truncate font-sans text-[8.5px] leading-none font-semibold tracking-normal uppercase sm:text-[10px] sm:[font-stretch:110%] sm:tracking-[0.16em]",
 								failed
 									? "text-crit"
 									: now

@@ -153,7 +153,7 @@ export function Panel({
 	return (
 		<section
 			className={cn(
-				"rise relative border border-line bg-panel/85 backdrop-blur-sm",
+				"rise relative min-w-0 border border-line bg-panel/85 backdrop-blur-sm",
 				glow && "shadow-[0_0_60px_-30px_var(--color-accent)]",
 				className,
 			)}
@@ -162,10 +162,12 @@ export function Panel({
 			{title && (
 				<header className="flex items-center gap-3 border-b border-line px-4 py-2.5">
 					{code && (
-						<span className="font-mono text-[10px] text-accent">{code}</span>
+						<span className="shrink-0 font-mono text-[10px] whitespace-nowrap text-accent">
+							{code}
+						</span>
 					)}
-					<h2 className="label text-text-2">{title}</h2>
-					<span className="h-px flex-1 bg-line" />
+					<h2 className="label min-w-0 leading-snug text-text-2">{title}</h2>
+					<span className="h-px min-w-3 flex-1 bg-line" />
 					{aside}
 				</header>
 			)}
@@ -188,7 +190,7 @@ export function Stat({
 	hint?: string;
 }) {
 	return (
-		<div className="rise relative border border-line bg-panel/85 p-4 backdrop-blur-sm">
+		<div className="rise relative min-w-0 border border-line bg-panel/85 p-3 backdrop-blur-sm sm:p-4">
 			<Corners />
 			<div className="label text-text-3">{label}</div>
 			<div className="mt-3 flex items-baseline gap-1.5">
@@ -295,45 +297,81 @@ export function Table({
 	align?: ("l" | "r")[];
 }) {
 	return (
-		<div className="overflow-x-auto">
-			<table className="w-full border-collapse text-left">
-				<thead>
-					<tr className="border-b border-line">
-						{head.map((h, i) => (
-							<th
-								key={h}
+		<>
+			{/* Phones: one card per row, the first cell as its title. */}
+			<ul className="divide-y divide-line sm:hidden">
+				{rows.map(([key, cells]) => (
+					<li key={key} className="space-y-3 px-4 py-3.5">
+						<div className="min-w-0">{cells[0]}</div>
+						<dl className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+							{cells.slice(1).map((c, i) => (
+								<div key={head[i + 1]} className="min-w-0">
+									<dt className="label text-[9px] text-text-3">
+										{head[i + 1]}
+									</dt>
+									<dd className="mt-1 truncate font-mono text-xs text-text-2 tabular-nums [&>div]:justify-start">
+										{c}
+									</dd>
+								</div>
+							))}
+						</dl>
+					</li>
+				))}
+			</ul>
+			<div className="hidden overflow-x-auto sm:block">
+				<TableGrid head={head} rows={rows} align={align} />
+			</div>
+		</>
+	);
+}
+
+function TableGrid({
+	head,
+	rows,
+	align,
+}: {
+	head: string[];
+	rows: [string, ReactNode[]][];
+	align?: ("l" | "r")[];
+}) {
+	return (
+		<table className="w-full border-collapse text-left">
+			<thead>
+				<tr className="border-b border-line">
+					{head.map((h, i) => (
+						<th
+							key={h}
+							className={cn(
+								"label px-4 py-3 font-semibold whitespace-nowrap text-text-3",
+								align?.[i] === "r" && "text-right",
+							)}
+						>
+							{h}
+						</th>
+					))}
+				</tr>
+			</thead>
+			<tbody>
+				{rows.map(([key, cells]) => (
+					<tr
+						key={key}
+						className="group border-b border-line/70 transition-colors last:border-0 hover:bg-hover/60"
+					>
+						{cells.map((c, i) => (
+							<td
+								key={head[i]}
 								className={cn(
-									"label px-4 py-3 font-semibold whitespace-nowrap text-text-3",
+									"px-4 py-3 font-mono text-xs whitespace-nowrap text-text-2 tabular-nums",
 									align?.[i] === "r" && "text-right",
 								)}
 							>
-								{h}
-							</th>
+								{c}
+							</td>
 						))}
 					</tr>
-				</thead>
-				<tbody>
-					{rows.map(([key, cells]) => (
-						<tr
-							key={key}
-							className="group border-b border-line/70 transition-colors last:border-0 hover:bg-hover/60"
-						>
-							{cells.map((c, i) => (
-								<td
-									key={head[i]}
-									className={cn(
-										"px-4 py-3 font-mono text-xs whitespace-nowrap text-text-2 tabular-nums",
-										align?.[i] === "r" && "text-right",
-									)}
-								>
-									{c}
-								</td>
-							))}
-						</tr>
-					))}
-				</tbody>
-			</table>
-		</div>
+				))}
+			</tbody>
+		</table>
 	);
 }
 

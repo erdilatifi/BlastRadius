@@ -145,7 +145,7 @@ export function Field({
 				textAnchor="middle"
 				fill="#f2f3ee"
 				fontFamily="var(--font-sans)"
-				fontSize="11"
+				fontSize="12"
 				fontWeight="600"
 				letterSpacing="2"
 			>
@@ -157,7 +157,7 @@ export function Field({
 				textAnchor="middle"
 				fill="#6b7a77"
 				fontFamily="var(--font-mono)"
-				fontSize="9"
+				fontSize="10"
 			>
 				{centerSub}
 			</text>
@@ -188,7 +188,7 @@ export function Field({
 							textAnchor="middle"
 							fill="#f2f3ee"
 							fontFamily="var(--font-mono)"
-							fontSize="11"
+							fontSize="12"
 						>
 							{n.name}
 						</text>
@@ -198,7 +198,7 @@ export function Field({
 							textAnchor="middle"
 							fill={colour[n.tone]}
 							fontFamily="var(--font-mono)"
-							fontSize="9"
+							fontSize="10"
 						>
 							{n.sub}
 						</text>

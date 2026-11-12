@@ -1,7 +1,7 @@
 PLAN.md
-.claude/settings.local.json
 target/
 node_modules/
+*.tsbuildinfo
 dist/
 .terraform/
 *.tfstate*

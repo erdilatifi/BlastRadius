@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
 	type Amount,
 	type CapacityView,
@@ -9,6 +10,7 @@ import { Field } from "./field";
 import { Stack3D, type Tower, tenantColors } from "./stack3d";
 import {
 	Chip,
+	cn,
 	Dot,
 	fmt,
 	Meter,
@@ -312,6 +314,7 @@ function towersOf(c: CapacityView): { towers: Tower[]; split: boolean } {
 function Stack({ c }: { c: CapacityView }) {
 	const { towers, split } = towersOf(c);
 	const names = split ? c.tenants.map((t) => t.name) : ["committed"];
+	const [focus, setFocus] = useState<string | null>(null);
 	return (
 		<Panel
 			title="Quota stack · live"
@@ -319,12 +322,17 @@ function Stack({ c }: { c: CapacityView }) {
 			glow
 			aside={
 				<span className="hidden font-mono text-[10px] text-text-3 sm:inline">
-					DRAG TO ORBIT
+					DRAG TO ORBIT · DOUBLE-CLICK TO RESET
 				</span>
 			}
 		>
 			<div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
-				<Stack3D towers={towers} gate={c.gatePercent} />
+				<Stack3D
+					towers={towers}
+					gate={c.gatePercent}
+					focus={focus}
+					onFocus={setFocus}
+				/>
 				<div className="space-y-4 self-center">
 					<p className="text-[12px] leading-relaxed text-text-2">
 						Each tower is the whole cluster. The layers are what tenants have
@@ -337,7 +345,12 @@ function Stack({ c }: { c: CapacityView }) {
 							return (
 								<li
 									key={n}
-									className="flex items-center justify-between gap-3 border border-line-2 bg-field px-3 py-2"
+									onPointerEnter={() => setFocus(n)}
+									onPointerLeave={() => setFocus(null)}
+									className={cn(
+										"flex items-center justify-between gap-3 border bg-field px-3 py-2 transition-colors",
+										focus === n ? "border-accent-line" : "border-line-2",
+									)}
 								>
 									<span className="flex items-center gap-2 font-mono text-[12px] text-text">
 										<span
