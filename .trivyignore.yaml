@@ -2,7 +2,8 @@ misconfigurations:
   - id: KSV-0125
     paths:
       - charts/tenant/templates/workload.yaml
-    statement: Trivy does not know ghcr.io/erdilatifi/blastradius; Kyverno restrict-image-registry allows only that registry.
+      - charts/blastradius/templates/controlplane.yaml
+    statement: Trivy does not know ghcr.io/erdilatifi/blastradius, the registry the release workflow signs every image into.
   - id: KSV-0037
     paths:
       - platform/observability/traefik.yaml
