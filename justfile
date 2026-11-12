@@ -47,6 +47,9 @@ up env:
     terraform -chdir=terraform/bootstrap init -input=false -reconfigure -backend-config="config_path=$kubeconfig"
     terraform -chdir=terraform/bootstrap apply -input=false -auto-approve -var-file=../envs/{{env}}.tfvars -var="kubeconfig=$kubeconfig"
     export KUBECONFIG=$kubeconfig
+    [ -f terraform/cluster/console-password ] || openssl rand -hex 12 > terraform/cluster/console-password
+    kubectl create namespace blastradius-system --dry-run=client -o yaml | kubectl apply -f -
+    kubectl -n blastradius-system create secret generic console-auth --dry-run=client -o yaml       --from-literal=users="admin:$(openssl passwd -apr1 "$(cat terraform/cluster/console-password)")" | kubectl apply -f -
     kubectl -n argocd wait --for=create application/argocd --timeout=5m
     kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced application/root application/argocd --timeout=10m
     kubectl -n argocd wait --for=jsonpath='{.status.health.status}'=Healthy application/root application/argocd --timeout=10m
