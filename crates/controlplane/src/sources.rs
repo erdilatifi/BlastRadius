@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use k8s_openapi::api::core::v1::Namespace;
 use kube::api::{ApiResource, DynamicObject, GroupVersionKind, ListParams};
 use kube::{Api, Client};
-use serde::Deserialize;
+use serde_json::Value;
 
 const CHAOS_OPT_IN: &str = "chaos-mesh.org/inject";
 
@@ -22,22 +22,6 @@ pub struct TenantRef {
 pub struct AppStatus {
     pub sync: String,
     pub health: String,
-}
-
-#[derive(Deserialize)]
-struct Response {
-    data: Data,
-}
-
-#[derive(Deserialize)]
-struct Data {
-    result: Vec<Sample>,
-}
-
-#[derive(Deserialize)]
-struct Sample {
-    metric: BTreeMap<String, String>,
-    value: (f64, String),
 }
 
 impl Sources {
@@ -95,7 +79,7 @@ impl Sources {
     pub async fn at(&self, label: &str, query: &str, time: Option<u64>) -> Result<BTreeMap<String, f64>> {
         let mut params = vec![("query", query.to_string())];
         params.extend(time.map(|t| ("time", t.to_string())));
-        let response: Response = self
+        let body: Value = self
             .http
             .get(format!("{}/api/v1/query", self.prometheus))
             .query(&params)
@@ -105,13 +89,13 @@ impl Sources {
             .json()
             .await
             .context("prometheus response")?;
-        Ok(response
-            .data
-            .result
+        Ok(body["data"]["result"]
+            .as_array()
             .into_iter()
+            .flatten()
             .filter_map(|s| {
-                let value = s.value.1.parse::<f64>().ok().filter(|v| v.is_finite())?;
-                Some((s.metric.get(label)?.clone(), value))
+                let value = s["value"][1].as_str()?.parse::<f64>().ok().filter(|v| v.is_finite())?;
+                Some((s["metric"][label].as_str()?.to_string(), value))
             })
             .collect())
     }

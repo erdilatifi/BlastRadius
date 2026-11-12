@@ -96,7 +96,7 @@ impl Amount {
             .unwrap_or(0)
     }
 
-    fn fields(self) -> [(&'static str, u64); 3] {
+    pub fn fields(self) -> [(&'static str, u64); 3] {
         [("cpu", self.cpu_millis), ("memory", self.memory_mib), ("pods", self.pods)]
     }
 }

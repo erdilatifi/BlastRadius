@@ -49,3 +49,9 @@ spec:
             runbook_url: {{ $runbook }}/tenant-{{ $slo }}-burn.md
         {{- end }}
         {{- end }}
+        - alert: TenantCrashLooping
+          expr: sum(increase(kube_pod_container_status_restarts_total{namespace="tenant-{{ $name }}"}[10m])) > 3
+          labels: {severity: page, tenant: {{ $name }}}
+          annotations:
+            summary: {{ $name }} containers restarted more than 3 times in 10 minutes
+            runbook_url: {{ $runbook }}/tenant-crash-looping.md

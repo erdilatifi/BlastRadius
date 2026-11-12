@@ -73,6 +73,7 @@ export type Incident = {
 	detectSeconds: number | null;
 	markdown: string;
 	pr: string | null;
+	fix: string | null;
 };
 
 async function get<T>(path: string): Promise<T> {
