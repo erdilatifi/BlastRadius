@@ -1,0 +1,30 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - crates/**
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/release.yml
+
+permissions: {}
+
+jobs:
+  workload:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}/workload:sha-${GITHUB_SHA::7}"
+          docker build -f crates/workload/Dockerfile -t "$image" .
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$image"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
