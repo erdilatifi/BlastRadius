@@ -61,6 +61,8 @@ kind: Service
 metadata:
   name: workload
   namespace: tenant-{{ .Values.name }}
+  labels:
+    app.kubernetes.io/name: workload
 spec:
   selector:
     app.kubernetes.io/name: workload

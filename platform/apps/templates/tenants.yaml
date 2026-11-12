@@ -25,6 +25,8 @@ spec:
     - {group: networking.k8s.io, kind: NetworkPolicy}
     - {group: rbac.authorization.k8s.io, kind: Role}
     - {group: rbac.authorization.k8s.io, kind: RoleBinding}
+    - {group: monitoring.coreos.com, kind: ServiceMonitor}
+    - {group: monitoring.coreos.com, kind: PrometheusRule}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet

@@ -1,6 +1,9 @@
 image:
   repository: ghcr.io/erdilatifi/blastradius/workload
 
+slo:
+  latencyObjective: 95
+
 tiers:
   small:
     requests: {cpuMillis: 50, memoryMiB: 32}

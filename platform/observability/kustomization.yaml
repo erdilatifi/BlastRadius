@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - traefik.yaml
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+configMapGenerator:
+  - name: dashboard-tenant-slo
+    namespace: monitoring
+    files: [dashboards/tenant-slo.json]
+  - name: dashboard-platform-health
+    namespace: monitoring
+    files: [dashboards/platform-health.json]
+  - name: dashboard-noisy-neighbour
+    namespace: monitoring
+    files: [dashboards/noisy-neighbour.json]

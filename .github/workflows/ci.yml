@@ -112,8 +112,9 @@ jobs:
       - run: |
           for values in tenants/*/values.yaml; do
             helm lint --strict charts/tenant -f "$values"
-            helm template "$(basename "$(dirname "$values")")" charts/tenant -f "$values" | kubeconform -strict -summary
+            helm template "$(basename "$(dirname "$values")")" charts/tenant -f "$values" | kubeconform -strict -summary -schema-location default -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
           done
+      - run: scripts/check-runbooks.sh
       - run: kyverno test tests/admission
 
   e2e:
@@ -138,6 +139,15 @@ jobs:
         env:
           KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
       - run: tests/isolation.sh acme globex
+        env:
+          KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
+      - run: tests/slo.sh acme globex
+        env:
+          KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
+      - run: |
+          kubectl top node
+          kubectl top pod -A --no-headers | awk '{m[$1]+=$4} END {for (n in m) printf "%-22s %4d Mi
+", n, m[n]}' | sort -k2 -n -r
         env:
           KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
       - if: failure()
