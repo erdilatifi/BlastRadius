@@ -73,7 +73,8 @@ fn one() -> u32 {
 }
 
 fn price(items: u32) -> u64 {
-    (1..=u64::from(items.min(MAX_ITEMS))).fold(0, |total, item| {
+    let items = items.min(MAX_ITEMS);
+    let base = (1..=u64::from(items)).fold(0, |total, item| {
         let mut x = item;
         for _ in 0..ROUNDS_PER_ITEM {
             x ^= x << 13;
@@ -81,7 +82,8 @@ fn price(items: u32) -> u64 {
             x ^= x << 17;
         }
         total + x % 1000
-    })
+    });
+    base - base / u64::from(100 / (items - 1).min(100))
 }
 
 fn fails(n: u64, error_rate: f64) -> bool {
