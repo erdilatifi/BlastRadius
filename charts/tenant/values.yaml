@@ -7,7 +7,7 @@ slo:
 tiers:
   small:
     requests: {cpuMillis: 50, memoryMiB: 32}
-    limits: {cpuMillis: 200, memoryMiB: 64}
+    limits: {cpuMillis: 400, memoryMiB: 64}
     quota: {cpuMillis: 400, memoryMiB: 256, pods: 6}
   medium:
     requests: {cpuMillis: 100, memoryMiB: 64}
