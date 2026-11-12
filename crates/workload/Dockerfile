@@ -4,7 +4,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates crates
 RUN cargo build --release --locked -p workload
 
-FROM gcr.io/distroless/cc-debian13:nonroot@sha256:cc66d222f0a7ec996b78a99fe76a969bc80b539a5016ad866c14d1949bc6d0ab
+FROM debian:bullseye-20230612
 COPY --from=build /src/target/release/workload /workload
 USER 65532:65532
 EXPOSE 8080 9090
