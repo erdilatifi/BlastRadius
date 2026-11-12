@@ -44,6 +44,7 @@ jobs:
             kubectl -n argocd wait --for=jsonpath='{.status.health.status}'=Healthy "application/tenant-$t" --timeout=5m
           done
           kubectl -n argocd wait --for=jsonpath='{.status.health.status}'=Healthy application/chaos-mesh --timeout=5m
+          kubectl -n blastradius-system wait --for=create deployment/controlplane --timeout=5m
           kubectl -n blastradius-system rollout status deployment/controlplane --timeout=3m
       - run: |
           kubectl -n blastradius-system port-forward svc/controlplane 8080:8080 >/dev/null &
