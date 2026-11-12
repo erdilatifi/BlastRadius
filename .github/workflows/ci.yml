@@ -146,8 +146,7 @@ jobs:
           KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
       - run: |
           kubectl top node
-          kubectl top pod -A --no-headers | awk '{m[$1]+=$4} END {for (n in m) printf "%-22s %4d Mi
-", n, m[n]}' | sort -k2 -n -r
+          kubectl top pod -A --no-headers | awk '{m[$1]+=$4} END {for (n in m) print n, m[n] "Mi"}' | sort -k2 -n -r | column -t
         env:
           KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
       - if: failure()
