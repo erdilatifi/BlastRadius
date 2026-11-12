@@ -82,8 +82,8 @@ jobs:
         run: |
           TAG=sha-${GITHUB_SHA::7}
           sed -i -E "s/sha-[0-9a-f]{7}/$TAG/" tenants/*/values.yaml tests/admission/good.yaml charts/blastradius/values.yaml
-          git config user.name blastradius-bot
-          git config user.email blastradius-bot@users.noreply.github.com
+          git config user.name "${{ github.repository_owner }}"
+          git config user.email "${{ github.repository_owner_id }}+${{ github.repository_owner }}@users.noreply.github.com"
           git switch -c "bump-$TAG"
           git commit -am "Roll images to $TAG"
           git push origin "bump-$TAG"
