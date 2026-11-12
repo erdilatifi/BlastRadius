@@ -1,0 +1,51 @@
+{{- $name := .Values.name }}
+{{- $svc := printf "service=~\"tenant-%s-workload-.*\"" $name }}
+{{- $slos := dict "availability" (subf 1 (divf .Values.slo.availability 100)) "latency" (subf 1 (divf .Values.slo.latencyObjective 100)) }}
+{{- $runbook := "https://github.com/erdilatifi/BlastRadius/blob/main/runbooks" }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: workload
+  namespace: tenant-{{ $name }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: workload
+  endpoints:
+    - port: admin
+      path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: slo
+  namespace: tenant-{{ $name }}
+spec:
+  groups:
+    - name: slo
+      rules:
+        {{- range $slo, $budget := $slos }}
+        - record: tenant:slo_budget:ratio
+          expr: vector({{ $budget }})
+          labels: {tenant: {{ $name }}, slo: {{ $slo }}}
+        {{- end }}
+        {{- range list "5m" "30m" "1h" "6h" }}
+        - record: tenant:slo_errors:ratio_rate{{ . }}
+          expr: sum(rate(traefik_service_requests_total{ {{- $svc }},code=~"5.."}[{{ . }}])) / sum(rate(traefik_service_requests_total{ {{- $svc }}}[{{ . }}]))
+          labels: {tenant: {{ $name }}, slo: availability}
+        - record: tenant:slo_errors:ratio_rate{{ . }}
+          expr: 1 - sum(rate(traefik_service_request_duration_seconds_bucket{ {{- $svc }},le="{{ divf $.Values.slo.latencyMs 1000 }}"}[{{ . }}])) / sum(rate(traefik_service_request_duration_seconds_count{ {{- $svc }}}[{{ . }}]))
+          labels: {tenant: {{ $name }}, slo: latency}
+        {{- end }}
+        {{- range $slo, $budget := $slos }}
+        {{- range list (list "Fast" "1h" "5m" 14.4 "page") (list "Slow" "6h" "30m" 6 "ticket") }}
+        {{- $sel := printf "{tenant=\"%s\",slo=\"%s\"}" $name $slo }}
+        - alert: Tenant{{ title $slo }}{{ index . 0 }}Burn
+          expr: tenant:slo_errors:ratio_rate{{ index . 1 }}{{ $sel }} > {{ index . 3 }} * {{ $budget }} and tenant:slo_errors:ratio_rate{{ index . 2 }}{{ $sel }} > {{ index . 3 }} * {{ $budget }}
+          for: 1m
+          labels: {severity: {{ index . 4 }}, tenant: {{ $name }}, slo: {{ $slo }}}
+          annotations:
+            summary: {{ $name }} is burning its {{ $slo }} error budget {{ index . 3 }}x too fast
+            runbook_url: {{ $runbook }}/tenant-{{ $slo }}-burn.md
+        {{- end }}
+        {{- end }}
