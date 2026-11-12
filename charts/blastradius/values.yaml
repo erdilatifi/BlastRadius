@@ -1,6 +1,6 @@
 controlplane:
   repository: ghcr.io/erdilatifi/blastradius/controlplane
-  tag: sha-e24e18f
+  tag: sha-e2852c0
 scribe:
   mode: artifact
 remediation:
