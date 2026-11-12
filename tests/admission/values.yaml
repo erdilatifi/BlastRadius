@@ -1,0 +1,11 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Value
+metadata:
+  name: values
+namespaces:
+  - apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: tenant-acme
+      labels:
+        tenant: acme

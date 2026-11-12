@@ -1,0 +1,16 @@
+image:
+  repository: ghcr.io/erdilatifi/blastradius/workload
+
+tiers:
+  small:
+    requests: {cpuMillis: 50, memoryMiB: 32}
+    limits: {cpuMillis: 200, memoryMiB: 64}
+    quota: {cpuMillis: 400, memoryMiB: 256, pods: 6}
+  medium:
+    requests: {cpuMillis: 100, memoryMiB: 64}
+    limits: {cpuMillis: 400, memoryMiB: 128}
+    quota: {cpuMillis: 800, memoryMiB: 512, pods: 8}
+  large:
+    requests: {cpuMillis: 200, memoryMiB: 128}
+    limits: {cpuMillis: 800, memoryMiB: 256}
+    quota: {cpuMillis: 1600, memoryMiB: 1024, pods: 12}

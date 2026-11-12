@@ -32,6 +32,7 @@ install() {
     k3d) binary k3d "https://github.com/k3d-io/k3d/releases/download/v$K3D_VERSION/k3d-linux-amd64" ;;
     cosign) binary cosign "https://github.com/sigstore/cosign/releases/download/v$COSIGN_VERSION/cosign-linux-amd64" ;;
     helm) archive helm "https://get.helm.sh/helm-v$HELM_VERSION-linux-amd64.tar.gz" linux-amd64/helm ;;
+    kubeconform) archive kubeconform "https://github.com/yannh/kubeconform/releases/download/v$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" kubeconform ;;
     kyverno) archive kyverno "https://github.com/kyverno/kyverno/releases/download/v$KYVERNO_VERSION/kyverno-cli_v${KYVERNO_VERSION}_linux_x86_64.tar.gz" kyverno ;;
     trivy) archive trivy "https://github.com/aquasecurity/trivy/releases/download/v$TRIVY_VERSION/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" trivy ;;
     k6) archive k6 "https://github.com/grafana/k6/releases/download/v$K6_VERSION/k6-v$K6_VERSION-linux-amd64.tar.gz" "k6-v$K6_VERSION-linux-amd64/k6" ;;
@@ -40,7 +41,7 @@ install() {
 }
 
 tools=("$@")
-[ $# -gt 0 ] || tools=(rust node terraform tflint kubectl k3d cosign helm kyverno trivy k6 just)
+[ $# -gt 0 ] || tools=(rust node terraform tflint kubectl k3d cosign helm kubeconform kyverno trivy k6 just)
 for tool in "${tools[@]}"; do
   install "$tool"
 done

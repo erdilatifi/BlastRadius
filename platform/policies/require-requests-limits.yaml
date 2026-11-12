@@ -1,0 +1,25 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-requests-limits
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments]
+  matchConstraints:
+    namespaceSelector:
+      matchExpressions:
+        - key: tenant
+          operator: Exists
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  variables:
+    - name: unbounded
+      expression: "(object.spec.containers + object.spec.?initContainers.orValue([])).filter(c, !(has(c.resources) && has(c.resources.requests) && has(c.resources.limits) && ['cpu', 'memory'].all(r, r in c.resources.requests && r in c.resources.limits))).map(c, c.name)"
+  validations:
+    - expression: size(variables.unbounded) == 0
+      messageExpression: "'containers need cpu and memory requests and limits: ' + variables.unbounded.join(', ')"

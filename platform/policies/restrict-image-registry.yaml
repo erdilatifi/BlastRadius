@@ -1,0 +1,25 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: restrict-image-registry
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments]
+  matchConstraints:
+    namespaceSelector:
+      matchExpressions:
+        - key: tenant
+          operator: Exists
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  variables:
+    - name: foreign
+      expression: "(object.spec.containers + object.spec.?initContainers.orValue([])).filter(c, !c.image.startsWith('ghcr.io/erdilatifi/blastradius/')).map(c, c.image)"
+  validations:
+    - expression: size(variables.foreign) == 0
+      messageExpression: "'images must come from ghcr.io/erdilatifi/blastradius: ' + variables.foreign.join(', ')"

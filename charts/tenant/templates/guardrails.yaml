@@ -1,0 +1,117 @@
+{{- $tier := required "unknown tier" (index .Values.tiers .Values.tier) }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tenant
+spec:
+  hard:
+    requests.cpu: {{ $tier.quota.cpuMillis }}m
+    requests.memory: {{ $tier.quota.memoryMiB }}Mi
+    pods: "{{ $tier.quota.pods }}"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: tenant
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu: {{ $tier.requests.cpuMillis }}m
+        memory: {{ $tier.requests.memoryMiB }}Mi
+      default:
+        cpu: {{ $tier.limits.cpuMillis }}m
+        memory: {{ $tier.limits.memoryMiB }}Mi
+      max:
+        cpu: {{ $tier.limits.cpuMillis }}m
+        memory: {{ $tier.limits.memoryMiB }}Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-traefik
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: workload
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - port: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-admin
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: workload
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values: [monitoring, blastradius-system]
+      ports:
+        - port: admin
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tenant-devs
+rules:
+  - apiGroups: ["", apps, autoscaling, networking.k8s.io, policy]
+    resources: [pods, pods/log, services, events, deployments, replicasets, horizontalpodautoscalers, ingresses, poddisruptionbudgets]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tenant-devs
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: tenant-{{ .Values.name }}-devs
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tenant-devs

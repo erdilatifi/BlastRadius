@@ -1,0 +1,25 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: disallow-latest-tag
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments]
+  matchConstraints:
+    namespaceSelector:
+      matchExpressions:
+        - key: tenant
+          operator: Exists
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  variables:
+    - name: unpinned
+      expression: "(object.spec.containers + object.spec.?initContainers.orValue([])).filter(c, !c.image.substring(c.image.lastIndexOf('/') + 1).contains(':') || c.image.endsWith(':latest')).map(c, c.image)"
+  validations:
+    - expression: size(variables.unpinned) == 0
+      messageExpression: "'image must be pinned to a tag other than latest: ' + variables.unpinned.join(', ')"
