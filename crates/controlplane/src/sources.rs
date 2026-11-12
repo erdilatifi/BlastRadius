@@ -6,10 +6,12 @@ use kube::api::{ApiResource, DynamicObject, GroupVersionKind, ListParams};
 use kube::{Api, Client};
 use serde::Deserialize;
 
+const CHAOS_OPT_IN: &str = "chaos-mesh.org/inject";
+
 pub struct Sources {
-    http: reqwest::Client,
+    pub http: reqwest::Client,
     prometheus: String,
-    kube: Client,
+    pub kube: Client,
 }
 
 pub struct TenantRef {
@@ -89,11 +91,32 @@ impl Sources {
             .collect())
     }
 
+    pub async fn opted_in(&self, tenant: &str) -> Result<bool> {
+        let ns = Api::<Namespace>::all(self.kube.clone())
+            .get_opt(&format!("tenant-{tenant}"))
+            .await?;
+        let meta = ns.map(|n| n.metadata).unwrap_or_default();
+        let label = meta.labels.unwrap_or_default().remove("tenant");
+        let opt_in = meta.annotations.unwrap_or_default().remove(CHAOS_OPT_IN);
+        Ok(label.as_deref() == Some(tenant) && opt_in.as_deref() == Some("enabled"))
+    }
+
     pub async fn by(&self, label: &str, query: &str) -> Result<BTreeMap<String, f64>> {
+        self.at(label, query, None).await
+    }
+
+    pub async fn at(
+        &self,
+        label: &str,
+        query: &str,
+        time: Option<u64>,
+    ) -> Result<BTreeMap<String, f64>> {
+        let mut params = vec![("query", query.to_string())];
+        params.extend(time.map(|t| ("time", t.to_string())));
         let response: Response = self
             .http
             .get(format!("{}/api/v1/query", self.prometheus))
-            .query(&[("query", query)])
+            .query(&params)
             .send()
             .await?
             .error_for_status()?

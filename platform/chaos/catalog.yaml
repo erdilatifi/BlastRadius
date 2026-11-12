@@ -1,0 +1,54 @@
+chaos:
+  baselineSeconds: 120
+  recoverySeconds: 180
+  thresholds:
+    errorRisePp: 0.5
+    p95Factor: 1.5
+    p95MarginMs: 10
+    healthyErrorPp: 1
+  experiments:
+    pod-kill:
+      hypothesis: The target stays inside its SLO because a second replica and the PDB carry it. Bystanders do not move.
+      injectSeconds: 120
+      chaos:
+        kind: PodChaos
+        spec:
+          action: pod-kill
+          mode: one
+    cpu-stress:
+      hypothesis: The target is throttled at its own CPU limit. Bystanders keep their p95.
+      injectSeconds: 120
+      chaos:
+        kind: StressChaos
+        spec:
+          mode: all
+          stressors:
+            cpu:
+              workers: 2
+              load: 100
+    memory-stress:
+      hypothesis: The target container is OOM-killed at its own memory limit. No node pressure, no bystander restarts.
+      injectSeconds: 120
+      chaos:
+        kind: StressChaos
+        spec:
+          mode: one
+          stressors:
+            memory:
+              workers: 1
+              size: 256MB
+    network-delay:
+      hypothesis: Only the target's latency SLI moves.
+      injectSeconds: 120
+      chaos:
+        kind: NetworkChaos
+        spec:
+          action: delay
+          mode: all
+          delay:
+            latency: 200ms
+    error-burst:
+      hypothesis: The fast-burn alert fires for the target only.
+      injectSeconds: 600
+      fault:
+        error_rate: 0.5

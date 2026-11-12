@@ -8,6 +8,7 @@ import {
 	Outlet,
 	RouterProvider,
 } from "react-router";
+import { Chaos } from "./chaos";
 import "./index.css";
 import { Capacity, Tenants } from "./pages";
 
@@ -28,6 +29,9 @@ function Layout() {
 				<NavLink to="/tenants" className={link}>
 					Tenants
 				</NavLink>
+				<NavLink to="/chaos" className={link}>
+					Chaos
+				</NavLink>
 				<NavLink to="/capacity" className={link}>
 					Capacity
 				</NavLink>
@@ -43,6 +47,7 @@ const router = createBrowserRouter([
 		children: [
 			{ index: true, element: <Navigate to="/tenants" replace /> },
 			{ path: "tenants", element: <Tenants /> },
+			{ path: "chaos", element: <Chaos /> },
 			{ path: "capacity", element: <Capacity /> },
 		],
 	},

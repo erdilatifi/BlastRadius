@@ -15,6 +15,9 @@ rules:
   - apiGroups: [argoproj.io]
     resources: [applications]
     verbs: [get, list, watch]
+  - apiGroups: [chaos-mesh.org]
+    resources: [podchaos, stresschaos, networkchaos]
+    verbs: [create, delete]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -40,6 +43,8 @@ data:
       {{- toYaml .Values.tiers | nindent 6 }}
     capacity:
       {{- toYaml (pick .Values "cpuMillis" "memoryMiB" "pods") | nindent 6 }}
+    chaos:
+      {{- toYaml .Values.chaos | nindent 6 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -56,7 +61,7 @@ spec:
       labels:
         app.kubernetes.io/name: controlplane
       annotations:
-        checksum/platform: {{ pick .Values "tiers" "cpuMillis" "memoryMiB" "pods" | toYaml | sha256sum }}
+        checksum/platform: {{ pick .Values "tiers" "cpuMillis" "memoryMiB" "pods" "chaos" | toYaml | sha256sum }}
     spec:
       serviceAccountName: controlplane
       securityContext:
@@ -68,6 +73,9 @@ spec:
       containers:
         - name: controlplane
           image: {{ .Values.controlplane.repository }}:{{ required "controlplane.tag is required" .Values.controlplane.tag }}
+          env:
+            - name: COMMIT
+              value: {{ .Values.controlplane.tag }}
           ports:
             - name: http
               containerPort: 8080
