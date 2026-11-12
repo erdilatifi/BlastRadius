@@ -13,8 +13,10 @@ apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
   name: traefik
-  namespace: kube-system
+  namespace: monitoring
 spec:
+  namespaceSelector:
+    matchNames: [kube-system]
   selector:
     matchLabels:
       app.kubernetes.io/name: traefik

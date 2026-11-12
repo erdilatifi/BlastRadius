@@ -3,3 +3,7 @@ misconfigurations:
     paths:
       - charts/tenant/templates/workload.yaml
     statement: Trivy does not know ghcr.io/erdilatifi/blastradius; Kyverno restrict-image-registry allows only that registry.
+  - id: KSV-0037
+    paths:
+      - platform/observability/traefik.yaml
+    statement: k3s installs Traefik from a HelmChart in kube-system, and a HelmChartConfig must sit next to it.
