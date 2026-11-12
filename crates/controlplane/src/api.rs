@@ -2,12 +2,13 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::State as Extract;
+use axum::extract::{Path, State as Extract};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use brcore::{Amount, GATE_PERCENT};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
+use crate::runs::{self, Experiment, Refusal, Run};
 use crate::sources::{AppStatus, TenantRef};
 use crate::{Platform, State};
 
@@ -101,6 +102,48 @@ pub async fn capacity(Extract(state): Extract<Arc<State>>) -> Result<Json<Capaci
     )?;
     let usage = [&cpu_used, &cpu_requested, &memory_used, &memory_requested];
     Ok(Json(capacity_view(&state.platform, list, usage)))
+}
+
+pub async fn experiments(
+    Extract(state): Extract<Arc<State>>,
+) -> Json<BTreeMap<String, Experiment>> {
+    Json(state.platform.chaos.experiments.clone())
+}
+
+pub async fn runs(Extract(state): Extract<Arc<State>>) -> Json<Vec<Run>> {
+    Json(state.runs.all())
+}
+
+pub async fn run(
+    Extract(state): Extract<Arc<State>>,
+    Path(id): Path<String>,
+) -> Result<Json<Run>, StatusCode> {
+    state.runs.get(&id).map(Json).ok_or(StatusCode::NOT_FOUND)
+}
+
+#[derive(Deserialize)]
+pub struct StartRun {
+    experiment: String,
+    tenant: String,
+}
+
+pub async fn start_run(
+    Extract(state): Extract<Arc<State>>,
+    Json(body): Json<StartRun>,
+) -> Response {
+    match runs::start(state, &body.experiment, &body.tenant).await {
+        Ok(run) => (StatusCode::ACCEPTED, Json(run)).into_response(),
+        Err(Refusal::UnknownExperiment) => {
+            (StatusCode::NOT_FOUND, "no such experiment in the catalog").into_response()
+        }
+        Err(Refusal::NotOptedIn) => (
+            StatusCode::FORBIDDEN,
+            "only tenant namespaces that opted in to chaos can be targeted",
+        )
+            .into_response(),
+        Err(Refusal::Busy) => (StatusCode::CONFLICT, "another run is in progress").into_response(),
+        Err(Refusal::Failed(e)) => Failure(e).into_response(),
+    }
 }
 
 fn round(v: f64, places: i32) -> f64 {
@@ -220,11 +263,13 @@ mod tests {
 
     #[test]
     fn capacity_counts_committed_quota_and_what_still_fits() {
-        let platform: Platform = serde_saphyr::from_str(
-            "capacity: {cpuMillis: 4000, memoryMiB: 4096, pods: 60}\n\
-             tiers:\n  small:\n    requests: {cpuMillis: 50, memoryMiB: 32}\n    limits: {cpuMillis: 200, memoryMiB: 64}\n    quota: {cpuMillis: 400, memoryMiB: 256, pods: 6}\n",
-        )
+        let platform: Platform = serde_saphyr::from_str(&format!(
+            "capacity: {{cpuMillis: 4000, memoryMiB: 4096, pods: 60}}\n\
+             tiers:\n  small:\n    requests: {{cpuMillis: 50, memoryMiB: 32}}\n    limits: {{cpuMillis: 200, memoryMiB: 64}}\n    quota: {{cpuMillis: 400, memoryMiB: 256, pods: 6}}\n{}",
+            include_str!("../../../platform/chaos/catalog.yaml")
+        ))
         .unwrap();
+        assert_eq!(platform.chaos.experiments.len(), 5);
         let view = capacity_view(
             &platform,
             vec![tenant("acme", "small"), tenant("globex", "small")],

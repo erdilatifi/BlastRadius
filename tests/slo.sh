@@ -4,7 +4,14 @@ set -euo pipefail
 bad=$1 good=$2
 cd "$(dirname "$0")/.."
 pids=()
-trap 'kill "${pids[@]}" 2>/dev/null || true' EXIT
+port=19090
+reset() {
+  for p in $(seq 19090 $((port - 1))); do
+    curl -sf -X PUT -H 'content-type: application/json' -d '{}' "localhost:$p/admin/fault" || true
+  done
+  kill "${pids[@]}" 2>/dev/null || true
+}
+trap reset EXIT
 
 forward() {
   kubectl port-forward "$@" >/dev/null &
@@ -15,7 +22,6 @@ query() {
   curl -sf localhost:9091/api/v1/query --data-urlencode "query=$1" | jq -r '.data.result[] | "\(.metric.tenant // "-") \(.metric.slo // "-") \(.value[1])"' || true
 }
 
-port=19090
 for pod in $(kubectl -n "tenant-$bad" get pods -l app.kubernetes.io/name=workload -o name); do
   forward -n "tenant-$bad" "$pod" "$port:9090"
   sleep 2

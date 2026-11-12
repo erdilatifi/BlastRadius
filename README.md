@@ -14,6 +14,7 @@ It costs $0: clusters run in GitHub Codespaces and GitHub Actions.
 ## Scorecard
 
 <!-- scorecard:start -->
+No chaos runs recorded yet.
 <!-- scorecard:end -->
 
 ## Develop

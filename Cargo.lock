@@ -228,6 +228,8 @@ dependencies = [
  "anyhow",
  "brcore",
  "clap",
+ "reqwest",
+ "serde_json",
  "tokio",
 ]
 

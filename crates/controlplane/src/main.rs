@@ -1,4 +1,6 @@
 mod api;
+mod runs;
+mod score;
 mod sources;
 mod traffic;
 
@@ -17,6 +19,7 @@ use serde::Deserialize;
 use tokio::net::TcpListener;
 use tower_http::services::{ServeDir, ServeFile};
 
+use crate::runs::Runs;
 use crate::sources::Sources;
 
 struct Config {
@@ -24,6 +27,7 @@ struct Config {
     traefik: String,
     platform: PathBuf,
     web: PathBuf,
+    commit: String,
 }
 
 impl Config {
@@ -37,6 +41,7 @@ impl Config {
             traefik: var("TRAEFIK_URL", "http://traefik.kube-system"),
             platform: var("PLATFORM_FILE", "/etc/blastradius/platform.yaml").into(),
             web: var("WEB_DIR", "/web").into(),
+            commit: var("COMMIT", "unknown"),
         }
     }
 }
@@ -45,11 +50,13 @@ impl Config {
 pub struct Platform {
     tiers: BTreeMap<String, Tier>,
     capacity: Amount,
+    chaos: runs::Config,
 }
 
 pub struct State {
     sources: Sources,
     platform: Platform,
+    runs: Runs,
 }
 
 #[tokio::main]
@@ -64,6 +71,7 @@ async fn main() -> Result<()> {
     let state = Arc::new(State {
         sources: Sources::new(http.clone(), config.prometheus).await?,
         platform: serde_saphyr::from_str(&platform)?,
+        runs: Runs::new(config.commit.clone()),
     });
     let metrics = PrometheusBuilder::new().install_recorder()?;
     tokio::spawn(traffic::run(state.clone(), http, config.traefik));
@@ -72,6 +80,9 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route("/api/tenants", get(api::tenants))
         .route("/api/capacity", get(api::capacity))
+        .route("/api/experiments", get(api::experiments))
+        .route("/api/runs", get(api::runs).post(api::start_run))
+        .route("/api/runs/{id}", get(api::run))
         .route("/metrics", get(move || async move { metrics.render() }))
         .route("/healthz", get(|| async { "ok" }))
         .route("/readyz", get(|| async { "ok" }))

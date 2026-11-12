@@ -8,6 +8,7 @@ dev = ["pytest==9.2.0", "ruff==0.17.4"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

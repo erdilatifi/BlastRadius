@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export type TenantRow = {
 	name: string;
@@ -31,6 +31,39 @@ export type CapacityView = {
 	tenants: Usage[];
 };
 
+export type Experiment = { hypothesis: string; injectSeconds: number };
+
+export type Window = {
+	errorPp: number;
+	p95Ms: number;
+	restarts: number;
+	unready: number;
+};
+
+export type Delta = {
+	tenant: string;
+	role: "target" | "clean" | "impacted";
+	baseline: Window | null;
+	inject: Window | null;
+	reasons: string[];
+};
+
+export type Run = {
+	id: string;
+	experiment: string;
+	target: string;
+	phase: "baseline" | "inject" | "recovery" | "scoring" | "done" | "failed";
+	startedAt: number;
+	detectSeconds: number | null;
+	recoverSeconds: number | null;
+	score: {
+		invalid: string | null;
+		blastRadius: number | null;
+		tenants: Delta[];
+	} | null;
+	error: string | null;
+};
+
 async function get<T>(path: string): Promise<T> {
 	const response = await fetch(path);
 	if (!response.ok)
@@ -49,3 +82,28 @@ export const useCapacity = () =>
 		queryKey: ["capacity"],
 		queryFn: () => get<CapacityView>("/api/capacity"),
 	});
+
+export const useExperiments = () =>
+	useQuery({
+		queryKey: ["experiments"],
+		queryFn: () => get<Record<string, Experiment>>("/api/experiments"),
+	});
+
+export const useRuns = () =>
+	useQuery({ queryKey: ["runs"], queryFn: () => get<Run[]>("/api/runs") });
+
+export function useStartRun() {
+	const client = useQueryClient();
+	return useMutation({
+		mutationFn: async (body: { experiment: string; tenant: string }) => {
+			const response = await fetch("/api/runs", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(body),
+			});
+			if (!response.ok) throw new Error(await response.text());
+			return (await response.json()) as Run;
+		},
+		onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
+	});
+}

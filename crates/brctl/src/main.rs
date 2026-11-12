@@ -1,13 +1,20 @@
+mod chaos;
+
 use std::env;
 use std::path::Path;
+use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 use brcore::{Change, GitHub, Repo, Tenant};
 use clap::{Parser, Subcommand};
 
+const API: &str = "http://localhost:8080";
+
 #[derive(Parser)]
 #[command(about = "BlastRadius platform CLI")]
 struct Cli {
+    #[arg(long, global = true, env = "BLASTRADIUS_API", default_value = API)]
+    api: String,
     #[command(subcommand)]
     command: Command,
 }
@@ -16,6 +23,31 @@ struct Cli {
 enum Command {
     #[command(subcommand, about = "Tenant lifecycle; every change is a pull request")]
     Tenant(TenantCommand),
+    #[command(subcommand, about = "Chaos runs against tenants that opted in")]
+    Chaos(ChaosCommand),
+    #[command(subcommand, about = "The run ledger")]
+    Ledger(LedgerCommand),
+    #[command(about = "Tenant sync and health; fails unless every tenant is Synced and Healthy")]
+    Status,
+}
+
+#[derive(Subcommand)]
+enum ChaosCommand {
+    #[command(about = "Start one run and follow it to its score")]
+    Run { experiment: String, tenant: String },
+    #[command(about = "Run catalog experiments (default all) against every tenant in turn")]
+    Campaign { experiments: Vec<String> },
+}
+
+#[derive(Subcommand)]
+enum LedgerCommand {
+    #[command(about = "Print this cluster's finished runs as JSON lines")]
+    Export {
+        #[arg(long, default_value = "local")]
+        environment: String,
+        #[arg(long)]
+        commit: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -46,9 +78,26 @@ fn path(name: &str) -> String {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<ExitCode> {
+    let cli = Cli::parse();
+    let api = chaos::Api::new(&cli.api);
+    let ok = match cli.command {
+        Command::Tenant(command) => tenant(command).await.map(|_| true)?,
+        Command::Chaos(ChaosCommand::Run { experiment, tenant }) => {
+            api.run(&experiment, &tenant).await?["phase"] == "done"
+        }
+        Command::Chaos(ChaosCommand::Campaign { experiments }) => api.campaign(experiments).await?,
+        Command::Ledger(LedgerCommand::Export {
+            environment,
+            commit,
+        }) => api.ledger(&environment, commit.as_deref()).await?,
+        Command::Status => api.status().await?,
+    };
+    Ok(ExitCode::from(u8::from(!ok)))
+}
+
+async fn tenant(command: TenantCommand) -> Result<()> {
     let mut repo = Repo::load(Path::new("."))?;
-    let Command::Tenant(command) = Cli::parse().command;
     match command {
         TenantCommand::New {
             name,

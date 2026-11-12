@@ -1,0 +1,57 @@
+name: gameday
+
+on:
+  schedule:
+    - cron: "23 1 * * *"
+  workflow_dispatch:
+    inputs:
+      experiments:
+        description: Catalog experiments to run against every tenant; empty runs them all
+        default: ""
+
+permissions: {}
+
+concurrency: gameday
+
+jobs:
+  campaign:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    permissions:
+      contents: write
+    env:
+      TF_VAR_revision: ${{ github.sha }}
+      KUBECONFIG: ${{ github.workspace }}/terraform/cluster/kubeconfig
+      EXPERIMENTS: ${{ inputs.experiments }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: cat versions.env >> "$GITHUB_ENV"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: scripts/toolchain.sh terraform kubectl k3d just
+      - run: cargo build -q --release -p brctl
+      - run: just up ci
+      - run: |
+          for t in $(ls tenants) ; do
+            kubectl -n argocd wait --for=create "application/tenant-$t" --timeout=5m
+            kubectl -n argocd wait --for=jsonpath='{.status.health.status}'=Healthy "application/tenant-$t" --timeout=5m
+          done
+          kubectl -n argocd wait --for=jsonpath='{.status.health.status}'=Healthy application/chaos-mesh --timeout=5m
+          kubectl -n blastradius-system rollout status deployment/controlplane --timeout=3m
+      - run: |
+          kubectl -n blastradius-system port-forward svc/controlplane 8080:8080 >/dev/null &
+          sleep 3
+          target/release/brctl chaos campaign $EXPERIMENTS
+          mkdir -p data
+          target/release/brctl ledger export --environment actions --commit "$GITHUB_SHA" >> data/runs.jsonl
+      - run: python reports/scorecard.py data/runs.jsonl README.md
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/runs.jsonl README.md
+          git commit -m "Record game day runs"
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - if: always()
+        run: just down

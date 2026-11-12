@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
 import { type Amount, useCapacity, useTenants } from "./api";
 
-const show = (v: number | null, unit = "") =>
+export const show = (v: number | null, unit = "") =>
 	v === null ? "–" : `${v}${unit}`;
 
 const grafana = `${location.protocol}//grafana.${location.host}`;
 
-function Status<T>({
+export function Status<T>({
 	query,
 	children,
 }: {
@@ -18,7 +18,7 @@ function Status<T>({
 	return children(query.data);
 }
 
-function Table({
+export function Table({
 	head,
 	rows,
 }: {
