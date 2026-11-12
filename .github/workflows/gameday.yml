@@ -15,7 +15,7 @@ on:
 
 permissions: {}
 
-concurrency: gameday
+concurrency: gameday-${{ github.ref }}
 
 jobs:
   campaign:
