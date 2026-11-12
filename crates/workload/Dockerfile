@@ -9,4 +9,5 @@ COPY --from=build /src/target/release/workload /workload
 USER 65532:65532
 EXPOSE 8080 9090
 STOPSIGNAL SIGINT
+HEALTHCHECK NONE
 ENTRYPOINT ["/workload"]
