@@ -6,7 +6,6 @@ slo:
 
 tiers:
   unbounded:
-    unbounded: true
     requests: {cpuMillis: 50, memoryMiB: 32}
     limits: {cpuMillis: 200, memoryMiB: 64}
     quota: {cpuMillis: 400, memoryMiB: 256, pods: 6}

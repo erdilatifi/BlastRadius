@@ -1,5 +1,5 @@
 {{- $tier := required "unknown tier" (index .Values.tiers .Values.tier) }}
-{{- if not $tier.unbounded }}
+{{- if ne $.Values.tier "unbounded" }}
 apiVersion: v1
 kind: ResourceQuota
 metadata:
