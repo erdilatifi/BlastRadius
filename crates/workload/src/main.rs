@@ -95,6 +95,7 @@ async fn quote(State(app): State<App>, Query(query): Query<QuoteQuery>) -> Respo
     }
     if fails(n, fault.error_rate) {
         metrics::counter!("workload_quotes_total", "outcome" => "error").increment(1);
+        tracing::error!(items = query.items, "quote failed: injected fault");
         return (StatusCode::INTERNAL_SERVER_ERROR, "injected fault").into_response();
     }
     metrics::counter!("workload_quotes_total", "outcome" => "ok").increment(1);
@@ -103,11 +104,7 @@ async fn quote(State(app): State<App>, Query(query): Query<QuoteQuery>) -> Respo
 
 async fn set_fault(State(app): State<App>, Json(fault): Json<Fault>) -> Response {
     if !(0.0..=1.0).contains(&fault.error_rate) {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "error_rate must be between 0 and 1",
-        )
-            .into_response();
+        return (StatusCode::UNPROCESSABLE_ENTITY, "error_rate must be between 0 and 1").into_response();
     }
     app.set_fault(fault);
     tracing::warn!(?fault, "fault set");
@@ -188,9 +185,7 @@ mod tests {
     }
 
     async fn get_quote(public: &Router) -> (StatusCode, String) {
-        let request = Request::get("/api/quote?items=3")
-            .body(Body::empty())
-            .unwrap();
+        let request = Request::get("/api/quote?items=3").body(Body::empty()).unwrap();
         let response = public.clone().oneshot(request).await.unwrap();
         let status = response.status();
         let body = response.into_body().collect().await.unwrap().to_bytes();
@@ -217,35 +212,19 @@ mod tests {
     #[tokio::test]
     async fn error_rate_on_and_off() {
         let (_, public, admin) = routers();
-        assert_eq!(
-            put_fault(&admin, r#"{"error_rate":0.5}"#).await,
-            StatusCode::OK
-        );
-        let errors = statuses(&public, 10)
-            .await
-            .into_iter()
-            .filter(|s| *s == StatusCode::INTERNAL_SERVER_ERROR)
-            .count();
+        assert_eq!(put_fault(&admin, r#"{"error_rate":0.5}"#).await, StatusCode::OK);
+        let errors =
+            statuses(&public, 10).await.into_iter().filter(|s| *s == StatusCode::INTERNAL_SERVER_ERROR).count();
         assert_eq!(errors, 5);
         assert_eq!(put_fault(&admin, "{}").await, StatusCode::OK);
-        assert!(
-            statuses(&public, 10)
-                .await
-                .iter()
-                .all(|s| *s == StatusCode::OK)
-        );
+        assert!(statuses(&public, 10).await.iter().all(|s| *s == StatusCode::OK));
     }
 
     #[tokio::test]
     async fn full_error_rate_fails_every_request() {
         let (_, public, admin) = routers();
         put_fault(&admin, r#"{"error_rate":1}"#).await;
-        assert!(
-            statuses(&public, 5)
-                .await
-                .iter()
-                .all(|s| *s == StatusCode::INTERNAL_SERVER_ERROR)
-        );
+        assert!(statuses(&public, 5).await.iter().all(|s| *s == StatusCode::INTERNAL_SERVER_ERROR));
     }
 
     #[tokio::test]
@@ -276,14 +255,8 @@ mod tests {
     #[tokio::test]
     async fn rejects_bad_faults() {
         let (app, _, admin) = routers();
-        assert_eq!(
-            put_fault(&admin, r#"{"error_rate":1.5}"#).await,
-            StatusCode::UNPROCESSABLE_ENTITY
-        );
-        assert_eq!(
-            put_fault(&admin, r#"{"errors":1}"#).await,
-            StatusCode::UNPROCESSABLE_ENTITY
-        );
+        assert_eq!(put_fault(&admin, r#"{"error_rate":1.5}"#).await, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(put_fault(&admin, r#"{"errors":1}"#).await, StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(app.lock().fault, Fault::default());
     }
 
@@ -291,10 +264,7 @@ mod tests {
     async fn admin_routes_are_not_public() {
         let (_, public, _) = routers();
         let request = Request::put("/admin/fault").body(Body::from("{}")).unwrap();
-        assert_eq!(
-            public.oneshot(request).await.unwrap().status(),
-            StatusCode::NOT_FOUND
-        );
+        assert_eq!(public.oneshot(request).await.unwrap().status(), StatusCode::NOT_FOUND);
     }
 
     #[test]

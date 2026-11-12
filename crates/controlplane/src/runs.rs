@@ -5,9 +5,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 use k8s_openapi::api::core::v1::Pod;
 use kube::Api;
-use kube::api::{
-    ApiResource, DeleteParams, DynamicObject, GroupVersionKind, ListParams, PostParams,
-};
+use kube::api::{ApiResource, DeleteParams, DynamicObject, GroupVersionKind, ListParams, PostParams};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -18,8 +16,10 @@ const POLL: Duration = Duration::from_secs(5);
 const SELECTOR: &str = "app.kubernetes.io/name=workload";
 const TRAFFIC: &str = r#"traefik_service_requests_total{service=~"tenant-.*"FILTER}[RANGE]"#;
 const LATENCY: &str = r#"histogram_quantile(0.95, sum by (le, tenant) (label_replace(rate(traefik_service_request_duration_seconds_bucket{service=~"tenant-.*"}[RANGE]), "tenant", "$1", "service", "tenant-(.+)-workload-.*"))) * 1000"#;
-const RESTARTS: &str = r#"sum by (namespace) (increase(kube_pod_container_status_restarts_total{namespace=~"tenant-.*"}[RANGE]))"#;
-const UNREADY: &str = r#"max_over_time(sum by (namespace) (kube_pod_status_ready{namespace=~"tenant-.*",condition="false"})[RANGE:15s])"#;
+const RESTARTS: &str =
+    r#"sum by (namespace) (increase(kube_pod_container_status_restarts_total{namespace=~"tenant-.*"}[RANGE]))"#;
+const UNREADY: &str =
+    r#"max_over_time(sum by (namespace) (kube_pod_status_ready{namespace=~"tenant-.*",condition="false"})[RANGE:15s])"#;
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,9 +48,10 @@ pub struct Config {
     pub experiments: BTreeMap<String, Experiment>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Phase {
+    #[default]
     Baseline,
     Inject,
     Recovery,
@@ -59,17 +60,17 @@ pub enum Phase {
     Failed,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Run {
     id: String,
     commit: String,
-    experiment: String,
-    target: String,
+    pub experiment: String,
+    pub target: String,
     phase: Phase,
     started_at: u64,
-    injected_at: Option<u64>,
-    removed_at: Option<u64>,
+    pub injected_at: Option<u64>,
+    pub removed_at: Option<u64>,
     finished_at: Option<u64>,
     detect_seconds: Option<u64>,
     recover_seconds: Option<u64>,
@@ -96,17 +97,12 @@ enum Handle {
 }
 
 fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
 impl Runs {
     pub fn new(commit: String) -> Runs {
-        Runs {
-            commit,
-            list: Mutex::new(Vec::new()),
-        }
+        Runs { commit, list: Mutex::new(Vec::new()) }
     }
 
     pub fn all(&self) -> Vec<Run> {
@@ -127,19 +123,9 @@ impl Runs {
 
 pub async fn start(state: Arc<State>, experiment: &str, target: &str) -> Result<Run, Refusal> {
     let config = &state.platform.chaos;
-    let plan = config
-        .experiments
-        .get(experiment)
-        .cloned()
-        .ok_or(Refusal::UnknownExperiment)?;
+    let plan = config.experiments.get(experiment).cloned().ok_or(Refusal::UnknownExperiment)?;
     let valid = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-';
-    if !target.chars().all(valid)
-        || !state
-            .sources
-            .opted_in(target)
-            .await
-            .map_err(Refusal::Failed)?
-    {
+    if !target.chars().all(valid) || !state.sources.opted_in(target).await.map_err(Refusal::Failed)? {
         return Err(Refusal::NotOptedIn);
     }
     let started_at = now();
@@ -148,23 +134,13 @@ pub async fn start(state: Arc<State>, experiment: &str, target: &str) -> Result<
         commit: state.runs.commit.clone(),
         experiment: experiment.into(),
         target: target.into(),
-        phase: Phase::Baseline,
         started_at,
-        injected_at: None,
-        removed_at: None,
-        finished_at: None,
-        detect_seconds: None,
-        recover_seconds: None,
         thresholds: config.thresholds,
-        score: None,
-        error: None,
+        ..Run::default()
     };
     {
         let mut list = state.runs.list.lock().unwrap_or_else(|e| e.into_inner());
-        if list
-            .iter()
-            .any(|r| !matches!(r.phase, Phase::Done | Phase::Failed))
-        {
+        if list.iter().any(|r| !matches!(r.phase, Phase::Done | Phase::Failed)) {
             return Err(Refusal::Busy);
         }
         list.push(run.clone());
@@ -199,10 +175,7 @@ async fn timeline(state: &State, id: &str, plan: &Experiment) -> Result<()> {
         r.phase = Phase::Inject;
         r.injected_at = Some(injected_at);
     });
-    watch(state, id, injected_at, plan.inject_seconds, |_| async {
-        false
-    })
-    .await;
+    watch(state, id, injected_at, plan.inject_seconds, |_| async { false }).await;
     let removal = remove(state, id, handle).await;
 
     let removed_at = now();
@@ -216,17 +189,9 @@ async fn timeline(state: &State, id: &str, plan: &Experiment) -> Result<()> {
         let (target, thresholds) = (run.target.clone(), config.thresholds);
         async move {
             match windows(state, at, 60).await {
-                Ok(w) => w.get(&target).is_some_and(|w| {
-                    thresholds
-                        .moved(
-                            &before,
-                            &Window {
-                                restarts: 0.0,
-                                ..*w
-                            },
-                        )
-                        .is_empty()
-                }),
+                Ok(w) => w
+                    .get(&target)
+                    .is_some_and(|w| thresholds.moved(&before, &Window { restarts: 0.0, ..*w }).is_empty()),
                 Err(_) => false,
             }
         }
@@ -238,24 +203,9 @@ async fn timeline(state: &State, id: &str, plan: &Experiment) -> Result<()> {
         r.recover_seconds = recovered.map(|at| at - removed_at);
     });
     let during = windows(state, removed_at, removed_at - injected_at).await?;
-    let tenants: Vec<String> = state
-        .sources
-        .tenants()
-        .await?
-        .into_iter()
-        .map(|t| t.name)
-        .collect();
-    let score = score::score(
-        &config.thresholds,
-        &run.target,
-        &tenants,
-        &baseline,
-        &during,
-    );
-    let labels = [
-        ("experiment", run.experiment.clone()),
-        ("target", run.target.clone()),
-    ];
+    let tenants: Vec<String> = state.sources.tenants().await?.into_iter().map(|t| t.name).collect();
+    let score = score::score(&config.thresholds, &run.target, &tenants, &baseline, &during);
+    let labels = [("experiment", run.experiment.clone()), ("target", run.target.clone())];
     if let Some(n) = score.blast_radius {
         metrics::gauge!("blastradius_run_impacted_bystanders", &labels).set(n as f64);
     }
@@ -266,30 +216,18 @@ async fn timeline(state: &State, id: &str, plan: &Experiment) -> Result<()> {
     Ok(())
 }
 
-async fn watch<F, Fut>(
-    state: &State,
-    id: &str,
-    injected_at: u64,
-    seconds: u64,
-    done: F,
-) -> Option<u64>
+async fn watch<F, Fut>(state: &State, id: &str, injected_at: u64, seconds: u64, done: F) -> Option<u64>
 where
     F: Fn(u64) -> Fut,
     Fut: Future<Output = bool>,
 {
     let target = state.runs.get(id)?.target;
-    let alert =
-        format!(r#"ALERTS{{alertstate="firing",alertname=~"Tenant.+Burn",tenant="{target}"}}"#);
+    let alert = format!(r#"ALERTS{{alertstate="firing",alertname=~"Tenant.+Burn",tenant="{target}"}}"#);
     let deadline = now() + seconds;
     while now() < deadline {
         tokio::time::sleep(POLL).await;
         let at = now();
-        if state
-            .sources
-            .by("tenant", &alert)
-            .await
-            .is_ok_and(|a| !a.is_empty())
-        {
+        if state.sources.by("tenant", &alert).await.is_ok_and(|a| !a.is_empty()) {
             state.runs.update(id, |r| {
                 r.detect_seconds.get_or_insert(at - injected_at);
             });
@@ -309,13 +247,8 @@ async fn windows(state: &State, at: u64, seconds: u64) -> Result<BTreeMap<String
             r#"sum by (tenant) (label_replace(rate({selector}), "tenant", "$1", "service", "tenant-(.+)-workload-.*"))"#
         )
     };
-    let errors = format!(
-        "100 * ({} / {all} or 0 * {all})",
-        traffic(r#",code=~"5..""#),
-        all = traffic("")
-    );
-    let [latency, restarts, unready] =
-        [LATENCY, RESTARTS, UNREADY].map(|q| q.replace("RANGE", &range));
+    let errors = format!("100 * ({} / {all} or 0 * {all})", traffic(r#",code=~"5..""#), all = traffic(""));
+    let [latency, restarts, unready] = [LATENCY, RESTARTS, UNREADY].map(|q| q.replace("RANGE", &range));
     let s = &state.sources;
     let (errors, p95, restarts, unready) = tokio::try_join!(
         s.at("tenant", &errors, Some(at)),
@@ -346,22 +279,16 @@ async fn inject(state: &State, id: &str, target: &str, plan: &Experiment) -> Res
         let resource = ApiResource::from_gvk_with_plural(&gvk, &chaos.kind.to_lowercase());
         let api = Api::<DynamicObject>::namespaced_with(kube, &ns, &resource);
         let mut spec = chaos.spec.clone();
-        spec["selector"] =
-            json!({"namespaces": [ns], "labelSelectors": {"app.kubernetes.io/name": "workload"}});
+        spec["selector"] = json!({"namespaces": [ns], "labelSelectors": {"app.kubernetes.io/name": "workload"}});
         spec["duration"] = json!(format!("{}s", plan.inject_seconds));
         let mut object = DynamicObject::new(id, &resource).within(&ns);
         object.data = json!({ "spec": spec });
         api.create(&PostParams::default(), &object).await?;
         return Ok(Handle::Chaos(Box::new(api)));
     }
-    let pods = Api::<Pod>::namespaced(kube, &ns)
-        .list(&ListParams::default().labels(SELECTOR))
-        .await?;
-    let urls: Vec<String> = pods
-        .into_iter()
-        .filter_map(|p| p.status?.pod_ip)
-        .map(|ip| format!("http://{ip}:9090/admin/fault"))
-        .collect();
+    let pods = Api::<Pod>::namespaced(kube, &ns).list(&ListParams::default().labels(SELECTOR)).await?;
+    let urls: Vec<String> =
+        pods.into_iter().filter_map(|p| p.status?.pod_ip).map(|ip| format!("http://{ip}:9090/admin/fault")).collect();
     set_fault(state, &urls, plan.fault.as_ref().unwrap_or(&json!({}))).await?;
     Ok(Handle::Fault(urls))
 }
@@ -378,14 +305,7 @@ async fn remove(state: &State, id: &str, handle: Handle) -> Result<()> {
 
 async fn set_fault(state: &State, urls: &[String], fault: &Value) -> Result<()> {
     for url in urls {
-        state
-            .sources
-            .http
-            .put(url)
-            .json(fault)
-            .send()
-            .await?
-            .error_for_status()?;
+        state.sources.http.put(url).json(fault).send().await?.error_for_status()?;
     }
     Ok(())
 }

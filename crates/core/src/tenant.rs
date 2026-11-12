@@ -91,19 +91,13 @@ impl Amount {
             .zip(committed.fields())
             .zip(quota.fields())
             .filter(|(_, (_, q))| *q > 0)
-            .map(|(((_, cap), (_, used)), (_, q))| {
-                (cap * GATE_PERCENT / 100).saturating_sub(used) / q
-            })
+            .map(|(((_, cap), (_, used)), (_, q))| (cap * GATE_PERCENT / 100).saturating_sub(used) / q)
             .min()
             .unwrap_or(0)
     }
 
     fn fields(self) -> [(&'static str, u64); 3] {
-        [
-            ("cpu", self.cpu_millis),
-            ("memory", self.memory_mib),
-            ("pods", self.pods),
-        ]
+        [("cpu", self.cpu_millis), ("memory", self.memory_mib), ("pods", self.pods)]
     }
 }
 
@@ -114,10 +108,7 @@ impl Tenant {
             tier: tier.into(),
             image: Image { tag: tag.into() },
             replicas: Replicas { min: 2, max: 4 },
-            slo: Slo {
-                availability: 99.5,
-                latency_ms: 300,
-            },
+            slo: Slo { availability: 99.5, latency_ms: 300 },
             chaos: true,
             remediation: true,
         }
@@ -128,40 +119,21 @@ impl Tenant {
         let valid = (2..=20).contains(&n.len())
             && n.starts_with(|c: char| c.is_ascii_lowercase())
             && !n.ends_with('-')
-            && n.chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
-        ensure!(
-            valid,
-            "tenant name {n:?} must be 2-20 of a-z, 0-9, '-', start with a letter, not end with '-'"
-        );
+            && n.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        ensure!(valid, "tenant name {n:?} must be 2-20 of a-z, 0-9, '-', start with a letter, not end with '-'");
         let Some(tier) = tiers.get(&self.tier) else {
-            bail!(
-                "{n}: unknown tier {:?}, expected one of {:?}",
-                self.tier,
-                tiers.keys().collect::<Vec<_>>()
-            );
+            bail!("{n}: unknown tier {:?}, expected one of {:?}", self.tier, tiers.keys().collect::<Vec<_>>());
         };
         ensure!(
             !self.image.tag.is_empty() && self.image.tag != "latest",
             "{n}: image tag must be pinned, not empty or latest"
         );
         let r = &self.replicas;
-        ensure!(
-            1 <= r.min && r.min <= r.max,
-            "{n}: replicas need 1 <= min <= max"
-        );
+        ensure!(1 <= r.min && r.min <= r.max, "{n}: replicas need 1 <= min <= max");
         let peak = r.max + 1;
         let need = [
-            (
-                "cpu",
-                peak * tier.requests.cpu_millis,
-                tier.quota.cpu_millis,
-            ),
-            (
-                "memory",
-                peak * tier.requests.memory_mib,
-                tier.quota.memory_mib,
-            ),
+            ("cpu", peak * tier.requests.cpu_millis, tier.quota.cpu_millis),
+            ("memory", peak * tier.requests.memory_mib, tier.quota.memory_mib),
             ("pods", peak, tier.quota.pods),
         ];
         for (what, used, quota) in need {
@@ -173,14 +145,8 @@ impl Tenant {
             );
         }
         let a = self.slo.availability;
-        ensure!(
-            a > 0.0 && a < 100.0,
-            "{n}: slo availability must be between 0 and 100"
-        );
-        ensure!(
-            self.slo.latency_ms > 0,
-            "{n}: slo latencyMs must be positive"
-        );
+        ensure!(a > 0.0 && a < 100.0, "{n}: slo availability must be between 0 and 100");
+        ensure!(self.slo.latency_ms > 0, "{n}: slo latencyMs must be positive");
         Ok(())
     }
 
@@ -198,11 +164,7 @@ impl Repo {
     pub fn load(root: &Path) -> Result<Repo> {
         let chart: ChartValues = read(&root.join("charts/tenant/values.yaml"))?;
         let apps: AppsValues = read(&root.join("platform/apps/values.yaml"))?;
-        let slug = apps
-            .repo_url
-            .trim_start_matches("https://github.com/")
-            .trim_end_matches(".git")
-            .to_string();
+        let slug = apps.repo_url.trim_start_matches("https://github.com/").trim_end_matches(".git").to_string();
         let mut dirs: Vec<_> = fs::read_dir(root.join("tenants"))?.collect::<Result<_, _>>()?;
         dirs.sort_by_key(|d| d.file_name());
         let mut tenants = Vec::new();
@@ -216,26 +178,15 @@ impl Repo {
             );
             tenants.push(tenant);
         }
-        Ok(Repo {
-            slug,
-            tiers: chart.tiers,
-            capacity: read(&root.join("platform/capacity.yaml"))?,
-            tenants,
-        })
+        Ok(Repo { slug, tiers: chart.tiers, capacity: read(&root.join("platform/capacity.yaml"))?, tenants })
     }
 
     pub fn tag(&self) -> Result<&str> {
-        self.tenants
-            .first()
-            .map(|t| t.image.tag.as_str())
-            .context("no tenant to copy the image tag from")
+        self.tenants.first().map(|t| t.image.tag.as_str()).context("no tenant to copy the image tag from")
     }
 
     pub fn committed(&self) -> Amount {
-        self.tenants
-            .iter()
-            .filter_map(|t| self.tiers.get(&t.tier))
-            .fold(Amount::default(), |s, t| s.plus(t.quota))
+        self.tenants.iter().filter_map(|t| self.tiers.get(&t.tier)).fold(Amount::default(), |s, t| s.plus(t.quota))
     }
 
     pub fn check(&self) -> Result<()> {
@@ -253,11 +204,7 @@ impl Repo {
     }
 
     pub fn add(&mut self, tenant: Tenant) -> Result<()> {
-        ensure!(
-            self.tenants.iter().all(|t| t.name != tenant.name),
-            "tenant {} already exists",
-            tenant.name
-        );
+        ensure!(self.tenants.iter().all(|t| t.name != tenant.name), "tenant {} already exists", tenant.name);
         self.tenants.push(tenant);
         self.check()
     }
@@ -295,27 +242,14 @@ mod tests {
     #[test]
     fn round_trips() {
         let t = Tenant::new("initech", "small", "sha-1");
-        assert_eq!(
-            serde_saphyr::from_str::<Tenant>(&t.to_yaml().unwrap()).unwrap(),
-            t
-        );
+        assert_eq!(serde_saphyr::from_str::<Tenant>(&t.to_yaml().unwrap()).unwrap(), t);
     }
 
     #[test]
     fn rejects_bad_tenants() {
         let r = repo();
-        for name in [
-            "a",
-            "Acme",
-            "1acme",
-            "acme-",
-            "acme_corp",
-            "abcdefghijklmnopqrstu",
-        ] {
-            assert!(
-                err(&r, Tenant::new(name, "small", "sha-1")).contains("tenant name"),
-                "{name}"
-            );
+        for name in ["a", "Acme", "1acme", "acme-", "acme_corp", "abcdefghijklmnopqrstu"] {
+            assert!(err(&r, Tenant::new(name, "small", "sha-1")).contains("tenant name"), "{name}");
         }
         assert!(err(&r, Tenant::new("acme", "small", "sha-1")).contains("already exists"));
         assert!(err(&r, Tenant::new("initech", "huge", "sha-1")).contains("unknown tier"));
@@ -333,36 +267,17 @@ mod tests {
     #[test]
     fn capacity_gate_refuses_at_85_percent() {
         let mut r = repo();
-        r.capacity = Amount {
-            cpu_millis: 3000,
-            memory_mib: 4096,
-            pods: 60,
-        };
+        r.capacity = Amount { cpu_millis: 3000, memory_mib: 4096, pods: 60 };
         r.add(Tenant::new("initech", "small", "sha-1")).unwrap();
         let e = err(&r, Tenant::new("hooli", "large", "sha-1"));
-        assert_eq!(
-            e,
-            "capacity gate: 3200 cpu committed would exceed 85% of 3000 declared in platform/capacity.yaml"
-        );
+        assert_eq!(e, "capacity gate: 3200 cpu committed would exceed 85% of 3000 declared in platform/capacity.yaml");
     }
 
     #[test]
     fn counts_how_many_more_fit_under_the_gate() {
-        let cap = Amount {
-            cpu_millis: 1000,
-            memory_mib: 1000,
-            pods: 10,
-        };
-        let used = Amount {
-            cpu_millis: 400,
-            memory_mib: 0,
-            pods: 0,
-        };
-        let quota = Amount {
-            cpu_millis: 200,
-            memory_mib: 100,
-            pods: 1,
-        };
+        let cap = Amount { cpu_millis: 1000, memory_mib: 1000, pods: 10 };
+        let used = Amount { cpu_millis: 400, memory_mib: 0, pods: 0 };
+        let quota = Amount { cpu_millis: 200, memory_mib: 100, pods: 1 };
         assert_eq!(cap.fits(used, quota), 2);
         assert_eq!(cap.fits(cap, quota), 0);
     }

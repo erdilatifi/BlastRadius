@@ -76,6 +76,14 @@ spec:
           env:
             - name: COMMIT
               value: {{ .Values.controlplane.tag }}
+            - name: SCRIBE_MODE
+              value: {{ .Values.scribe.mode }}
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: scribe-github
+                  key: token
+                  optional: true
           ports:
             - name: http
               containerPort: 8080

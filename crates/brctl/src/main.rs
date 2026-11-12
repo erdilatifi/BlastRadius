@@ -67,8 +67,7 @@ enum TenantCommand {
 }
 
 fn github(repo: &Repo) -> Result<GitHub> {
-    let token = env::var("GITHUB_TOKEN")
-        .context("set GITHUB_TOKEN to a token that can open pull requests")?;
+    let token = env::var("GITHUB_TOKEN").context("set GITHUB_TOKEN to a token that can open pull requests")?;
     let api = env::var("GITHUB_API_URL").unwrap_or_else(|_| "https://api.github.com".into());
     GitHub::new(&api, &repo.slug, &token)
 }
@@ -87,10 +86,9 @@ async fn main() -> Result<ExitCode> {
             api.run(&experiment, &tenant).await?["phase"] == "done"
         }
         Command::Chaos(ChaosCommand::Campaign { experiments }) => api.campaign(experiments).await?,
-        Command::Ledger(LedgerCommand::Export {
-            environment,
-            commit,
-        }) => api.ledger(&environment, commit.as_deref()).await?,
+        Command::Ledger(LedgerCommand::Export { environment, commit }) => {
+            api.ledger(&environment, commit.as_deref()).await?
+        }
         Command::Status => api.status().await?,
     };
     Ok(ExitCode::from(u8::from(!ok)))
@@ -99,11 +97,7 @@ async fn main() -> Result<ExitCode> {
 async fn tenant(command: TenantCommand) -> Result<()> {
     let mut repo = Repo::load(Path::new("."))?;
     match command {
-        TenantCommand::New {
-            name,
-            tier,
-            dry_run,
-        } => {
+        TenantCommand::New { name, tier, dry_run } => {
             let tenant = Tenant::new(&name, &tier, repo.tag()?);
             let yaml = tenant.to_yaml()?;
             repo.add(tenant)?;
@@ -112,26 +106,15 @@ async fn tenant(command: TenantCommand) -> Result<()> {
                 return Ok(());
             }
             let title = format!("Add tenant {name} ({tier})");
-            let body = format!(
-                "Onboards `{name}` on the `{tier}` tier. Validated and inside the capacity gate."
-            );
+            let body = format!("Onboards `{name}` on the `{tier}` tier. Validated and inside the capacity gate.");
             let url = github(&repo)?
-                .open_pr(
-                    &format!("tenant-new-{name}"),
-                    &path(&name),
-                    Change::Write(yaml),
-                    &title,
-                    &body,
-                )
+                .open_pr(&format!("tenant-new-{name}"), &path(&name), Change::Write(yaml), &title, &body)
                 .await?;
             println!("{url}");
         }
         TenantCommand::List => {
             repo.check()?;
-            println!(
-                "{:<20} {:<8} {:>8} {:>8}",
-                "TENANT", "TIER", "REPLICAS", "SLO"
-            );
+            println!("{:<20} {:<8} {:>8} {:>8}", "TENANT", "TIER", "REPLICAS", "SLO");
             for t in &repo.tenants {
                 println!(
                     "{:<20} {:<8} {:>8} {:>8}",
@@ -144,25 +127,14 @@ async fn tenant(command: TenantCommand) -> Result<()> {
             let (used, cap) = (repo.committed(), repo.capacity);
             println!(
                 "committed {}m/{}m cpu, {}Mi/{}Mi memory, {}/{} pods (gate 85%)",
-                used.cpu_millis,
-                cap.cpu_millis,
-                used.memory_mib,
-                cap.memory_mib,
-                used.pods,
-                cap.pods
+                used.cpu_millis, cap.cpu_millis, used.memory_mib, cap.memory_mib, used.pods, cap.pods
             );
         }
         TenantCommand::Rm { name } => {
             repo.remove(&name)?;
             let title = format!("Remove tenant {name}");
             let url = github(&repo)?
-                .open_pr(
-                    &format!("tenant-rm-{name}"),
-                    &path(&name),
-                    Change::Delete,
-                    &title,
-                    &title,
-                )
+                .open_pr(&format!("tenant-rm-{name}"), &path(&name), Change::Delete, &title, &title)
                 .await?;
             println!("{url}");
         }

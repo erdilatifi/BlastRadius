@@ -1,3 +1,5 @@
 controlplane:
   repository: ghcr.io/erdilatifi/blastradius/controlplane
   tag: sha-ca44e2d
+scribe:
+  mode: artifact

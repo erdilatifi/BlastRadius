@@ -14,13 +14,18 @@ use crate::{Platform, State};
 
 const AVAILABILITY: &str = r#"1 - tenant:slo_errors:ratio_rate5m{slo="availability"}"#;
 const TARGET: &str = r#"1 - tenant:slo_budget:ratio{slo="availability"}"#;
-const P95: &str = r#"histogram_quantile(0.95, sum by (le, tenant) (label_replace(rate(traefik_service_request_duration_seconds_bucket{service=~"tenant-.*"}[5m]), "tenant", "$1", "service", "tenant-(.+)-workload-.*")))"#;
-const BUDGET: &str = r#"clamp_min(1 - tenant:slo_errors:ratio_rate6h{slo="availability"} / tenant:slo_budget:ratio{slo="availability"}, 0)"#;
-const BURN: &str = r#"tenant:slo_errors:ratio_rate1h{slo="availability"} / tenant:slo_budget:ratio{slo="availability"}"#;
-const CPU_USED: &str = r#"sum by (namespace) (rate(container_cpu_usage_seconds_total{namespace=~"tenant-.*",container!=""}[5m])) * 1000"#;
-const CPU_REQUESTED: &str = r#"sum by (namespace) (kube_pod_container_resource_requests{namespace=~"tenant-.*",resource="cpu"}) * 1000"#;
-const MEMORY_USED: &str = r#"sum by (namespace) (container_memory_working_set_bytes{namespace=~"tenant-.*",container!=""}) / 1048576"#;
-const MEMORY_REQUESTED: &str = r#"sum by (namespace) (kube_pod_container_resource_requests{namespace=~"tenant-.*",resource="memory"}) / 1048576"#;
+pub const P95: &str = r#"histogram_quantile(0.95, sum by (le, tenant) (label_replace(rate(traefik_service_request_duration_seconds_bucket{service=~"tenant-.*"}[5m]), "tenant", "$1", "service", "tenant-(.+)-workload-.*")))"#;
+pub const BUDGET: &str = r#"clamp_min(1 - tenant:slo_errors:ratio_rate6h{slo="availability"} / tenant:slo_budget:ratio{slo="availability"}, 0)"#;
+pub const BURN: &str =
+    r#"tenant:slo_errors:ratio_rate1h{slo="availability"} / tenant:slo_budget:ratio{slo="availability"}"#;
+const CPU_USED: &str =
+    r#"sum by (namespace) (rate(container_cpu_usage_seconds_total{namespace=~"tenant-.*",container!=""}[5m])) * 1000"#;
+const CPU_REQUESTED: &str =
+    r#"sum by (namespace) (kube_pod_container_resource_requests{namespace=~"tenant-.*",resource="cpu"}) * 1000"#;
+const MEMORY_USED: &str =
+    r#"sum by (namespace) (container_memory_working_set_bytes{namespace=~"tenant-.*",container!=""}) / 1048576"#;
+const MEMORY_REQUESTED: &str =
+    r#"sum by (namespace) (kube_pod_container_resource_requests{namespace=~"tenant-.*",resource="memory"}) / 1048576"#;
 
 type Series = BTreeMap<String, f64>;
 
@@ -84,11 +89,7 @@ pub async fn tenants(Extract(state): Extract<Arc<State>>) -> Result<Json<Vec<Ten
         s.by("tenant", BUDGET),
         s.by("tenant", BURN),
     )?;
-    Ok(Json(tenant_rows(
-        list,
-        &apps,
-        [&availability, &target, &p95, &budget, &burn],
-    )))
+    Ok(Json(tenant_rows(list, &apps, [&availability, &target, &p95, &budget, &burn])))
 }
 
 pub async fn capacity(Extract(state): Extract<Arc<State>>) -> Result<Json<CapacityView>, Failure> {
@@ -104,9 +105,7 @@ pub async fn capacity(Extract(state): Extract<Arc<State>>) -> Result<Json<Capaci
     Ok(Json(capacity_view(&state.platform, list, usage)))
 }
 
-pub async fn experiments(
-    Extract(state): Extract<Arc<State>>,
-) -> Json<BTreeMap<String, Experiment>> {
+pub async fn experiments(Extract(state): Extract<Arc<State>>) -> Json<BTreeMap<String, Experiment>> {
     Json(state.platform.chaos.experiments.clone())
 }
 
@@ -114,10 +113,7 @@ pub async fn runs(Extract(state): Extract<Arc<State>>) -> Json<Vec<Run>> {
     Json(state.runs.all())
 }
 
-pub async fn run(
-    Extract(state): Extract<Arc<State>>,
-    Path(id): Path<String>,
-) -> Result<Json<Run>, StatusCode> {
+pub async fn run(Extract(state): Extract<Arc<State>>, Path(id): Path<String>) -> Result<Json<Run>, StatusCode> {
     state.runs.get(&id).map(Json).ok_or(StatusCode::NOT_FOUND)
 }
 
@@ -127,20 +123,13 @@ pub struct StartRun {
     tenant: String,
 }
 
-pub async fn start_run(
-    Extract(state): Extract<Arc<State>>,
-    Json(body): Json<StartRun>,
-) -> Response {
+pub async fn start_run(Extract(state): Extract<Arc<State>>, Json(body): Json<StartRun>) -> Response {
     match runs::start(state, &body.experiment, &body.tenant).await {
         Ok(run) => (StatusCode::ACCEPTED, Json(run)).into_response(),
-        Err(Refusal::UnknownExperiment) => {
-            (StatusCode::NOT_FOUND, "no such experiment in the catalog").into_response()
+        Err(Refusal::UnknownExperiment) => (StatusCode::NOT_FOUND, "no such experiment in the catalog").into_response(),
+        Err(Refusal::NotOptedIn) => {
+            (StatusCode::FORBIDDEN, "only tenant namespaces that opted in to chaos can be targeted").into_response()
         }
-        Err(Refusal::NotOptedIn) => (
-            StatusCode::FORBIDDEN,
-            "only tenant namespaces that opted in to chaos can be targeted",
-        )
-            .into_response(),
         Err(Refusal::Busy) => (StatusCode::CONFLICT, "another run is in progress").into_response(),
         Err(Refusal::Failed(e)) => Failure(e).into_response(),
     }
@@ -151,19 +140,14 @@ fn round(v: f64, places: i32) -> f64 {
     (v * f).round() / f
 }
 
-fn tenant_rows(
-    list: Vec<TenantRef>,
-    apps: &BTreeMap<String, AppStatus>,
-    m: [&Series; 5],
-) -> Vec<TenantRow> {
+fn tenant_rows(list: Vec<TenantRef>, apps: &BTreeMap<String, AppStatus>, m: [&Series; 5]) -> Vec<TenantRow> {
     let [availability, target, p95, budget, burn] = m;
     let percent = |s: &Series, name: &str| s.get(name).map(|v| round(v * 100.0, 3));
     let mut rows: Vec<TenantRow> = list
         .into_iter()
         .map(|t| {
             let app = apps.get(&t.name);
-            let status =
-                |f: fn(&AppStatus) -> &String| app.map_or("Unknown".into(), |a| f(a).clone());
+            let status = |f: fn(&AppStatus) -> &String| app.map_or("Unknown".into(), |a| f(a).clone());
             TenantRow {
                 sync: status(|a| &a.sync),
                 health: status(|a| &a.health),
@@ -208,13 +192,7 @@ fn capacity_view(platform: &Platform, list: Vec<TenantRef>, m: [&Series; 4]) -> 
         })
         .collect();
     tenants.sort_by(|a, b| a.name.cmp(&b.name));
-    CapacityView {
-        capacity: platform.capacity,
-        committed,
-        gate_percent: GATE_PERCENT,
-        fits,
-        tenants,
-    }
+    CapacityView { capacity: platform.capacity, committed, gate_percent: GATE_PERCENT, fits, tenants }
 }
 
 #[cfg(test)]
@@ -222,10 +200,7 @@ mod tests {
     use super::*;
 
     fn tenant(name: &str, tier: &str) -> TenantRef {
-        TenantRef {
-            name: name.into(),
-            tier: tier.into(),
-        }
+        TenantRef { name: name.into(), tier: tier.into() }
     }
 
     fn series(pairs: &[(&str, f64)]) -> Series {
@@ -234,13 +209,8 @@ mod tests {
 
     #[test]
     fn tenant_rows_are_display_ready_and_tolerate_missing_data() {
-        let apps = BTreeMap::from([(
-            "acme".to_string(),
-            AppStatus {
-                sync: "Synced".into(),
-                health: "Healthy".into(),
-            },
-        )]);
+        let apps =
+            BTreeMap::from([("acme".to_string(), AppStatus { sync: "Synced".into(), health: "Healthy".into() })]);
         let rows = tenant_rows(
             vec![tenant("globex", "medium"), tenant("acme", "small")],
             &apps,
@@ -273,12 +243,7 @@ mod tests {
         let view = capacity_view(
             &platform,
             vec![tenant("acme", "small"), tenant("globex", "small")],
-            [
-                &series(&[("tenant-acme", 12.4)]),
-                &Series::new(),
-                &Series::new(),
-                &Series::new(),
-            ],
+            [&series(&[("tenant-acme", 12.4)]), &Series::new(), &Series::new(), &Series::new()],
         );
         assert_eq!(view.committed.cpu_millis, 800);
         assert_eq!(view.fits["small"], 6);

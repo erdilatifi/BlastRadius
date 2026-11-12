@@ -21,9 +21,7 @@ pub async fn run(state: Arc<State>, http: reqwest::Client, traefik: String) {
             }
         }
         for tenant in &tenants {
-            let request = http
-                .get(&url)
-                .header("host", format!("{}.blastradius.localhost", tenant.name));
+            let request = http.get(&url).header("host", format!("{}.blastradius.localhost", tenant.name));
             let name = tenant.name.clone();
             tokio::spawn(async move {
                 let outcome = match request.send().await {

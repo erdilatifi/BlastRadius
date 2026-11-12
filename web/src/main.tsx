@@ -9,6 +9,7 @@ import {
 	RouterProvider,
 } from "react-router";
 import { Chaos } from "./chaos";
+import { Incidents } from "./incidents";
 import "./index.css";
 import { Capacity, Tenants } from "./pages";
 
@@ -32,6 +33,9 @@ function Layout() {
 				<NavLink to="/chaos" className={link}>
 					Chaos
 				</NavLink>
+				<NavLink to="/incidents" className={link}>
+					Incidents
+				</NavLink>
 				<NavLink to="/capacity" className={link}>
 					Capacity
 				</NavLink>
@@ -48,6 +52,7 @@ const router = createBrowserRouter([
 			{ index: true, element: <Navigate to="/tenants" replace /> },
 			{ path: "tenants", element: <Tenants /> },
 			{ path: "chaos", element: <Chaos /> },
+			{ path: "incidents", element: <Incidents /> },
 			{ path: "capacity", element: <Capacity /> },
 		],
 	},
