@@ -1,7 +1,7 @@
 name: globex
 tier: medium
 image:
-  tag: sha-7f42d6c
+  tag: sha-e24e18f
 replicas:
   min: 2
   max: 4
