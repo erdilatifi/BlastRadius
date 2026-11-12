@@ -52,6 +52,9 @@ spec:
                   - url: http://controlplane.blastradius-system:8080/hooks/alertmanager
                     send_resolved: true
         grafana:
+          ingress:
+            enabled: true
+            hosts: [grafana.blastradius.localhost]
           sidecar:
             dashboards:
               searchNamespace: ALL

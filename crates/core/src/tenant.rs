@@ -5,7 +5,7 @@ use std::path::Path;
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
-const GATE_PERCENT: u64 = 85;
+pub const GATE_PERCENT: u64 = 85;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -39,7 +39,7 @@ pub struct Slo {
     pub latency_ms: u64,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Amount {
     pub cpu_millis: u64,
@@ -77,12 +77,25 @@ pub struct Repo {
 }
 
 impl Amount {
-    fn add(self, o: Amount) -> Amount {
+    pub fn plus(self, o: Amount) -> Amount {
         Amount {
             cpu_millis: self.cpu_millis + o.cpu_millis,
             memory_mib: self.memory_mib + o.memory_mib,
             pods: self.pods + o.pods,
         }
+    }
+
+    pub fn fits(self, committed: Amount, quota: Amount) -> u64 {
+        self.fields()
+            .into_iter()
+            .zip(committed.fields())
+            .zip(quota.fields())
+            .filter(|(_, (_, q))| *q > 0)
+            .map(|(((_, cap), (_, used)), (_, q))| {
+                (cap * GATE_PERCENT / 100).saturating_sub(used) / q
+            })
+            .min()
+            .unwrap_or(0)
     }
 
     fn fields(self) -> [(&'static str, u64); 3] {
@@ -222,7 +235,7 @@ impl Repo {
         self.tenants
             .iter()
             .filter_map(|t| self.tiers.get(&t.tier))
-            .fold(Amount::default(), |s, t| s.add(t.quota))
+            .fold(Amount::default(), |s, t| s.plus(t.quota))
     }
 
     pub fn check(&self) -> Result<()> {
@@ -331,6 +344,27 @@ mod tests {
             e,
             "capacity gate: 3200 cpu committed would exceed 85% of 3000 declared in platform/capacity.yaml"
         );
+    }
+
+    #[test]
+    fn counts_how_many_more_fit_under_the_gate() {
+        let cap = Amount {
+            cpu_millis: 1000,
+            memory_mib: 1000,
+            pods: 10,
+        };
+        let used = Amount {
+            cpu_millis: 400,
+            memory_mib: 0,
+            pods: 0,
+        };
+        let quota = Amount {
+            cpu_millis: 200,
+            memory_mib: 100,
+            pods: 1,
+        };
+        assert_eq!(cap.fits(used, quota), 2);
+        assert_eq!(cap.fits(cap, quota), 0);
     }
 
     #[test]

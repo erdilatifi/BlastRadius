@@ -7,25 +7,28 @@ on:
       - crates/**
       - Cargo.toml
       - Cargo.lock
+      - web/**
       - .github/workflows/release.yml
   pull_request:
     paths:
       - crates/**
       - Cargo.toml
       - Cargo.lock
+      - web/**
       - .github/workflows/release.yml
 
 permissions: {}
 
 jobs:
-  workload:
+  image:
+    strategy:
+      matrix:
+        name: [workload, controlplane]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
       id-token: write
-    outputs:
-      tag: ${{ steps.image.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -33,15 +36,13 @@ jobs:
       - run: scripts/toolchain.sh trivy cosign
       - id: image
         run: |
-          tag=sha-$(git rev-parse --short=7 HEAD)
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/workload:$tag" >> "$GITHUB_OUTPUT"
-      - run: docker build -f crates/workload/Dockerfile -t "${{ steps.image.outputs.image }}" .
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/${{ matrix.name }}:sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - run: docker build -f crates/${{ matrix.name }}/Dockerfile -t "${{ steps.image.outputs.image }}" .
       - run: trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "${{ steps.image.outputs.image }}"
       - run: trivy image --format cyclonedx --output sbom.cdx.json "${{ steps.image.outputs.image }}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: sbom
+          name: sbom-${{ matrix.name }}
           path: sbom.cdx.json
       - if: github.event_name == 'push'
         run: |
@@ -56,27 +57,27 @@ jobs:
 
   bump:
     if: github.event_name == 'push'
-    needs: workload
+    needs: image
     runs-on: ubuntu-24.04
     permissions:
       contents: read
     env:
       GH_TOKEN: ${{ secrets.BOT_TOKEN }}
-      TAG: ${{ needs.workload.outputs.tag }}
     steps:
       - if: env.GH_TOKEN == ''
-        run: echo "::warning::BOT_TOKEN is not set; open the tag-bump PR to $TAG by hand"
+        run: echo "::warning::BOT_TOKEN is not set; open the tag-bump PR to sha-${GITHUB_SHA::7} by hand"
       - if: env.GH_TOKEN != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ secrets.BOT_TOKEN }}
       - if: env.GH_TOKEN != ''
         run: |
-          sed -i -E "s/sha-[0-9a-f]{7}/$TAG/" tenants/*/values.yaml tests/admission/good.yaml
+          TAG=sha-${GITHUB_SHA::7}
+          sed -i -E "s/sha-[0-9a-f]{7}/$TAG/" tenants/*/values.yaml tests/admission/good.yaml charts/blastradius/values.yaml
           git config user.name blastradius-bot
           git config user.email blastradius-bot@users.noreply.github.com
           git switch -c "bump-$TAG"
-          git commit -am "Roll tenants to workload $TAG"
+          git commit -am "Roll images to $TAG"
           git push origin "bump-$TAG"
           gh pr create --fill --base main
           gh pr merge --auto --squash
