@@ -197,12 +197,15 @@ flowchart LR
 Written by the nightly workflow from the [run ledger](data/runs.jsonl).
 
 <!-- scorecard:start -->
-12 chaos runs: 6 scored, 3 invalid, 3 failed. Last run 2026-11-12 17:08 UTC.
+27 chaos runs: 21 scored, 3 invalid, 3 failed. Last run 2026-11-13 09:45 UTC.
 
 | Experiment | Runs | Runs with impacted bystanders | Most impacted | Detect (median) | Recover (median) |
 |---|---|---|---|---|---|
-| `cpu-stress` | 9 | 0 | 0 | 5 s | 40 s |
-| `pod-kill` | 3 | 0 | – | 50 s | 5 s |
+| `cpu-stress` | 12 | 0 | 0 | 5 s | 40 s |
+| `error-burst` | 3 | 0 | 0 | 140 s | 55 s |
+| `memory-stress` | 3 | 0 | 0 | 5 s | 5 s |
+| `network-delay` | 3 | 0 | 0 | 5 s | 55 s |
+| `pod-kill` | 6 | 0 | 0 | 50 s | 5 s |
 <!-- scorecard:end -->
 
 ## Game days
