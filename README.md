@@ -234,3 +234,9 @@ acme's p95 fell from 539 ms to 6 ms at 200 requests per second after raising the
 - [Performance](docs/performance.md) and [environments](docs/environments.md).
 - [The isolation-checker chart](charts/isolation-checker/README.md): running BlastRadius on a cluster you already have.
 - [Run ledger](data/runs.jsonl): every chaos run, written by the nightly workflow.
+
+## License
+
+Copyright (c) 2026 Erdi Latifi.
+
+This project is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE). You may use, study and modify it for personal, educational and other noncommercial purposes. Commercial use is not permitted without written permission from the author.
